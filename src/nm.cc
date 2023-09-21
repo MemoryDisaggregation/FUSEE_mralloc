@@ -1,6 +1,8 @@
 #include "nm.h"
 
+#include <cstdio>
 #include <netdb.h>
+#include <rdma/rdma_cma.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
@@ -13,6 +15,8 @@
 
 #include "ib.h"
 #include "kv_debug.h"
+#include "msg.h"
+#include "rdma_conn.h"
 
 int UDPNetworkManager::UDPCMInitClient(const struct GlobalConfig * conf) {
     this->num_server_ = conf->memory_num;
@@ -115,35 +119,6 @@ UDPNetworkManager::~UDPNetworkManager() {
     free(server_addr_list_);
 }
 
-int UDPNetworkManager::nm_on_connect_new_qp(const struct KVMsg * request, 
-    __OUT struct QpInfo * qp_info) {
-    int rc = 0;
-    struct ibv_qp * new_rc_qp = this->server_create_rc_qp();
-    // assert(new_rc_qp != NULL);
-
-    if (this->rc_qp_list_.size() <= request->id) {
-        this->rc_qp_list_.resize(request->id + 1);
-    }
-    if (this->rc_qp_list_[request->id] != NULL) {
-        ibv_destroy_qp(rc_qp_list_[request->id]);
-    }
-    this->rc_qp_list_[request->id] = new_rc_qp;
-
-    rc = this->get_qp_info(new_rc_qp, qp_info);
-    // assert(rc == 0);
-    return 0;
-}
-
-int UDPNetworkManager::nm_on_connect_connect_qp(uint32_t client_id, 
-    const struct QpInfo * local_qp_info, 
-    const struct QpInfo * remote_qp_info) {
-    int rc = 0;
-    struct ibv_qp * qp = this->rc_qp_list_[client_id];
-    rc = ib_connect_qp(qp, local_qp_info, remote_qp_info, 
-        this->conn_type_, this->role_);
-    // assert(rc == 0);
-    return 0;
-}
 
 int UDPNetworkManager::client_connect_all_rc_qp() {
     int rc = 0;
@@ -155,133 +130,52 @@ int UDPNetworkManager::client_connect_all_rc_qp() {
 }
 
 int UDPNetworkManager::client_connect_one_rc_qp(uint32_t server_id) {
-    int rc = 0;
-    struct ibv_qp * new_rc_qp = client_create_rc_qp();
-    // assert(new_rc_qp != NULL);
-    
-    struct KVMsg request;
-    memset(&request, 0, sizeof(struct KVMsg));
-    request.type = REQ_CONNECT;
-    request.id   = this->server_id_;
-    rc = get_qp_info(new_rc_qp, &request.body.conn_info.qp_info);
-    // assert(rc == 0);
-    serialize_kvmsg(&request);
 
-    rc = sendto(this->udp_sock_, &request, sizeof(struct KVMsg), 
-        0, (struct sockaddr *)&this->server_addr_list_[server_id], 
-        sizeof(struct sockaddr_in));
-    // assert(rc == sizeof(struct KVMsg));
+    // TODO: using rdma_cma connect to create qp connection
 
-    struct KVMsg reply;
-    int len;
-    rc = recvfrom(this->udp_sock_, &reply, sizeof(struct KVMsg), 
-        0, NULL, NULL);
-    // assert(rc == sizeof(struct KVMsg));
-    deserialize_kvmsg(&reply);
-    deserialize_kvmsg(&request);
+    rdma_connection_ = new mralloc::RDMAConnection();
 
-    // assert(reply.type == REP_CONNECT);
-    
-    rc = ib_connect_qp(new_rc_qp, &request.body.conn_info.qp_info, 
-        &reply.body.conn_info.qp_info, this->conn_type_, this->role_);
-    // assert(rc == 0);
+    char port[6];
+    sprintf(port, "%u", ntohs(this->server_addr_list_[server_id].sin_port));
+
+    rdma_connection_->init(inet_ntoa(this->server_addr_list_[server_id].sin_addr), port, this->ib_ctx_, this->ib_pd_, this->ib_cq_, mralloc::CONN_FUSEE);
 
     // record this rc_qp
-    this->rc_qp_list_[server_id] = new_rc_qp;
+    this->rc_qp_list_[server_id] = rdma_connection_->get_qp();
     // record the memory info
     struct MrInfo * mr_info = (struct MrInfo *)malloc(sizeof(struct MrInfo));
-    memcpy(mr_info, &reply.body.conn_info.gc_info, sizeof(struct MrInfo));
+    // memcpy(mr_info, &reply.body.conn_info.gc_info, sizeof(struct MrInfo));
+    mr_info->addr = 0x10000000;
+    mr_info->rkey = rdma_connection_->get_rkey();
     this->mr_info_list_[server_id] = mr_info;
     return 0;
 }
 
 int UDPNetworkManager::client_connect_one_rc_qp(uint32_t server_id, 
         __OUT struct MrInfo * mr_info) {
-    int rc = 0;
-    struct ibv_qp * new_rc_qp = client_create_rc_qp();
-    // assert(new_rc_qp != NULL);
     
-    struct KVMsg request;
-    memset(&request, 0, sizeof(struct KVMsg));
-    request.type = REQ_CONNECT;
-    request.id   = server_id_;
-    rc = get_qp_info(new_rc_qp, &request.body.conn_info.qp_info);
-    // assert(rc == 0);
-    serialize_kvmsg(&request);
+    rdma_connection_ = new mralloc::RDMAConnection();
 
-    rc = sendto(udp_sock_, &request, sizeof(struct KVMsg), 
-        0, (struct sockaddr *)&server_addr_list_[server_id], 
-        sizeof(struct sockaddr_in));
-    // assert(rc == sizeof(struct KVMsg));
+    char port[6];
+    sprintf(port, "%u", ntohs(this->server_addr_list_[server_id].sin_port));
 
-    struct KVMsg reply;
-    int len;
-    rc = recvfrom(udp_sock_, &reply, sizeof(struct KVMsg), 
-        0, NULL, NULL);
-    // assert(rc == sizeof(struct KVMsg));
-    deserialize_kvmsg(&reply);
-    deserialize_kvmsg(&request);
+    rdma_connection_->init(inet_ntoa(this->server_addr_list_[server_id].sin_addr), port, mralloc::CONN_FUSEE);
 
-    // assert(reply.type == REP_CONNECT);
-    
-    rc = ib_connect_qp(new_rc_qp, &request.body.conn_info.qp_info, 
-        &reply.body.conn_info.qp_info, conn_type_, role_);
-    // assert(rc == 0);
+    // record this rc_qp
+    this->rc_qp_list_[server_id] = rdma_connection_->get_qp();
 
     // record this rc_qp
     struct MrInfo * new_mr_info = (struct MrInfo *)malloc(sizeof(struct MrInfo));
-    memcpy(new_mr_info, &reply.body.conn_info.gc_info, sizeof(struct MrInfo));
-    rc_qp_list_[server_id] = new_rc_qp;
+    new_mr_info->addr = 0x10000000;
+    new_mr_info->rkey = rdma_connection_->get_rkey();
+    mr_info->addr = 0x10000000;
+    mr_info->rkey = rdma_connection_->get_rkey();
+    rc_qp_list_[server_id] = rdma_connection_->get_qp();
     mr_info_list_[server_id] = new_mr_info;
     // return the memory info
-    memcpy(mr_info, &reply.body.conn_info.gc_info, sizeof(struct MrInfo));
     return 0;
 }
 
-struct ibv_qp * UDPNetworkManager::client_create_rc_qp() {
-    struct ibv_qp_init_attr qp_init_attr;
-    memset(&qp_init_attr, 0, sizeof(struct ibv_qp_init_attr));
-
-    qp_init_attr.qp_type    = IBV_QPT_RC;
-    qp_init_attr.sq_sig_all = 0;
-    qp_init_attr.send_cq    = this->ib_cq_;
-    qp_init_attr.recv_cq    = this->ib_cq_;
-    qp_init_attr.cap.max_send_wr  = 512;
-    qp_init_attr.cap.max_recv_wr  = 1;
-    qp_init_attr.cap.max_send_sge = 16;
-    qp_init_attr.cap.max_recv_sge = 16;
-
-    return ib_create_rc_qp(this->ib_pd_, &qp_init_attr);
-}
-
-struct ibv_qp * UDPNetworkManager::server_create_rc_qp() {
-    struct ibv_qp_init_attr qp_init_attr;
-    memset(&qp_init_attr, 0, sizeof(struct ibv_qp_init_attr));
-
-    qp_init_attr.qp_type    = IBV_QPT_RC;
-    qp_init_attr.sq_sig_all = 0;
-    qp_init_attr.send_cq    = this->ib_cq_;
-    qp_init_attr.recv_cq    = this->ib_cq_;
-    qp_init_attr.cap.max_send_wr = 1;
-    qp_init_attr.cap.max_recv_wr = 1;
-    qp_init_attr.cap.max_send_sge = 1;
-    qp_init_attr.cap.max_recv_sge = 1;
-    qp_init_attr.cap.max_inline_data = 256;
-
-    return ib_create_rc_qp(this->ib_pd_, &qp_init_attr);
-}
-
-int UDPNetworkManager::get_qp_info(struct ibv_qp * qp, __OUT struct QpInfo * qp_info) {
-    qp_info->qp_num   = qp->qp_num;
-    qp_info->lid      = this->ib_port_attr_.lid;
-    qp_info->port_num = this->ib_port_num_;
-    if (this->conn_type_ == ROCE) {
-        memcpy(qp_info->gid, this->ib_gid_, sizeof(union ibv_gid));
-    } else {
-        memset(qp_info->gid, 0, sizeof(union ibv_gid));
-    }
-    return 0;
-}
 
 void UDPNetworkManager::get_ib_info(__OUT struct IbInfo * ib_info) {
     ib_info->conn_type = this->conn_type_;

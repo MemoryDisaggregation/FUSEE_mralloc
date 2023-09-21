@@ -44,7 +44,7 @@ int Server::server_on_connect(const struct KVMsg * request,
 
     reply.id   = server_id_;
     reply.type = REP_CONNECT;
-    rc = nm_->nm_on_connect_new_qp(request, &reply.body.conn_info.qp_info);
+    // rc = nm_->nm_on_connect_new_qp(request, &reply.body.conn_info.qp_info);
     // assert(rc == 0);
 
     rc = mm_->get_mr_info(&reply.body.conn_info.gc_info);
@@ -56,7 +56,7 @@ int Server::server_on_connect(const struct KVMsg * request,
     // assert(rc == 0);
     
     deserialize_kvmsg(&reply);
-    rc = nm_->nm_on_connect_connect_qp(request->id, &reply.body.conn_info.qp_info, &request->body.conn_info.qp_info);
+    // rc = nm_->nm_on_connect_connect_qp(request->id, &reply.body.conn_info.qp_info, &request->body.conn_info.qp_info);
     // assert(rc == 0);
     return 0;
 }

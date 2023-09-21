@@ -143,7 +143,7 @@ void * ib_connect_server(void * args) {
     struct KVMsg reply;
     reply.id = nm->get_server_id();
     reply.type = REP_CONNECT;
-    rc = nm->nm_on_connect_new_qp(&request, &reply.body.conn_info.qp_info);
+    // rc = nm->nm_on_connect_new_qp(&request, &reply.body.conn_info.qp_info);
     assert(rc == 0);
 
     struct IbInfo ib_info;
@@ -158,8 +158,8 @@ void * ib_connect_server(void * args) {
     rc = nm->nm_send_udp_msg(&reply, &client_addr, client_addr_len);
     assert(rc == 0);
     deserialize_kvmsg(&reply);
-    rc = nm->nm_on_connect_connect_qp(request.id, &reply.body.conn_info.qp_info,
-        &request.body.conn_info.qp_info);
+    // rc = nm->nm_on_connect_connect_qp(request.id, &reply.body.conn_info.qp_info,
+        // &request.body.conn_info.qp_info);
     assert(rc == 0);
     return NULL;
 }

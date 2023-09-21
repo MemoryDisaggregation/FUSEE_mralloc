@@ -1,5 +1,6 @@
 #include "client_mm.h"
 
+#include <bits/stdint-uintn.h>
 #include <unistd.h>
 #include <assert.h>
 #include <sys/time.h>
@@ -426,29 +427,31 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     struct KVMsg request, reply;
     memset(&request, 0, sizeof(struct KVMsg));
     memset(&reply, 0, sizeof(struct KVMsg));
-
+    uint32_t rkey; uint64_t addr;
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
-        request.type = REQ_ALLOC;
+        // TODO: using shared cpu cache to fill 
+        nm->get_rdma_connection()->remote_fetch_fast_block(addr, rkey);
     } else {
         // assert(alloc_type == TYPE_SUBTABLE);
-        request.type = REQ_ALLOC_SUBTABLE;
+        nm->get_rdma_connection()->remote_fusee_alloc(addr, rkey);
     }
-    serialize_kvmsg(&request);
+    // serialize_kvmsg(&request);
 
-    int ret = nm->nm_send_udp_msg_to_server(&request, server_id);
-    // assert(ret == 0);
-    ret = nm->nm_recv_udp_msg(&reply, NULL, NULL);
-    // assert(ret == 0);
-    deserialize_kvmsg(&reply);
+    // int ret = nm->nm_send_udp_msg_to_server(&request, server_id);
+    // // assert(ret == 0);
+    // ret = nm->nm_recv_udp_msg(&reply, NULL, NULL);
+    // // assert(ret == 0);
+    // deserialize_kvmsg(&reply);
 
     // if (alloc_type == TYPE_KVBLOCK) {
     //     // assert(reply.type == REP_ALLOC);
     // } else {
     //     // assert(reply.type == REP_ALLOC_SUBTABLE);
     // }
-
-    memcpy(mr_info, &reply.body.mr_info, sizeof(struct MrInfo));
+    mr_info->addr = addr;
+    mr_info->rkey = rkey;
+    // memcpy(mr_info, &reply.body.mr_info, sizeof(struct MrInfo));
     return 0;
 }
 
@@ -500,7 +503,9 @@ int ClientMM::reg_new_space(const struct MrInfo * mr_info_list, const uint8_t * 
     // send meta info to remote
     // print_log(DEBUG, "[%s] send meta info to remote", __FUNCTION__);
     for (int i = 0; i < num_replication_; i ++) {
-        uint32_t rkey = nm->get_server_rkey(i);
+        // [mralloc support]
+        uint32_t rkey = mr_info_list[i].rkey;
+        // uint32_t rkey = nm->get_server_rkey(i);
         // print_log(DEBUG, "[%s] writing to server(%d) addr(%lx) rkey(%x)", 
         //     __FUNCTION__, i, client_meta_addr_, rkey);
         ret = nm->nm_rdma_write_inl_to_sid(&meta_info, sizeof(ClientMetaAddrInfo),
@@ -534,6 +539,8 @@ int ClientMM::init_reg_space(struct MrInfo mr_info_list[][MAX_REP_NUM], uint8_t 
         }
 
         for (int i = 0; i < num_replication_; i ++) {
+            // [mralloc support]
+
             uint32_t rkey = nm->get_server_rkey(i);
             // print_log(DEBUG, "[%s] write meta to server(%d) raddr(%lx) rkey(%x)", __FUNCTION__, i, client_meta_addr_, rkey);
             ret = nm->nm_rdma_write_inl_to_sid(&meta_info, sizeof(ClientMetaAddrInfo),

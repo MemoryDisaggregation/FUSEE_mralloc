@@ -7,7 +7,8 @@ list(APPEND source_ddckv
     hashtable.cc
     client_mm.cc
     client.cc
-    client_cr.cc)
+    client_cr.cc
+    rdma_conn.cc)
 
 add_library(libddckv STATIC ${source_ddckv})
 
@@ -20,5 +21,5 @@ target_compile_options(
     # "-D_DEBUG"
 )
 
-target_link_libraries(libddckv ${Boost_LIBRARIES} boost_context boost_fiber tbb)
+target_link_libraries(libddckv ${Boost_LIBRARIES} boost_context boost_fiber tbb rdmacm ibverbs)
 

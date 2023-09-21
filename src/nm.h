@@ -2,6 +2,7 @@
 #define DDCKV_NM_H
 
 #include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
 #include <stdint.h>
 #include <netdb.h>
 
@@ -14,6 +15,17 @@
 
 #include "kv_utils.h"
 #include "ib.h"
+#include "rdma_conn.h"
+
+#define RESOLVE_TIMEOUT_MS 5000
+
+enum ConnMethod {CONN_RPC, CONN_ONESIDE};
+
+struct PData {
+  uint64_t buf_addr;
+  uint32_t buf_rkey;
+  uint32_t size;
+};
 
 class UDPNetworkManager {
 private:
@@ -24,6 +36,9 @@ private:
     struct sockaddr_in * server_addr_list_;
     uint32_t num_server_;
     uint32_t server_id_;
+    struct rdma_event_channel *cm_channel_;
+    struct rdma_cm_id *cm_id_;
+    mralloc::RDMAConnection *rdma_connection_;
 
     struct ibv_context   * ib_ctx_;
     struct ibv_pd        * ib_pd_;
@@ -45,9 +60,6 @@ private:
 
 // private methods
 private:
-    struct ibv_qp * server_create_rc_qp();
-    struct ibv_qp * client_create_rc_qp();
-    int  get_qp_info(struct ibv_qp * qp, __OUT struct QpInfo * qp_info);
     bool is_all_complete(const std::map<uint64_t, bool> & wr_id_comp_map);
 
 // inline public functions
@@ -66,6 +78,10 @@ public:
 
     inline uint32_t get_num_servers() {
         return num_server_;
+    }
+
+    inline mralloc::RDMAConnection* get_rdma_connection() {
+        return rdma_connection_;
     }
 
 public:
@@ -110,12 +126,6 @@ public:
             uint32_t size, uint64_t remote_addr, uint32_t remote_rkey, uint32_t server_id);
     int  nm_rdma_write_to_sid(void * local_addr, uint32_t local_lkey, 
             uint32_t size, uint64_t remote_addr, uint32_t remote_rkey, uint32_t server_id);
-
-    // for server
-    int nm_on_connect_new_qp(const struct KVMsg * request, __OUT struct QpInfo * qp_info);
-    int nm_on_connect_connect_qp(uint32_t client_id, 
-        const struct QpInfo * local_qp_info, 
-        const struct QpInfo * remote_qp_info);
 
     // for client
     int client_connect_all_rc_qp();
