@@ -1,6 +1,7 @@
 #include "nm.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <netdb.h>
 #include <rdma/rdma_cma.h>
 #include <stdlib.h>
@@ -28,7 +29,7 @@ int UDPNetworkManager::UDPCMInitClient(const struct GlobalConfig * conf) {
     this->rc_qp_list_.resize(conf->memory_num);
     this->mr_info_list_.reserve(conf->memory_num);
     // create deep cq for client
-    this->ib_cq_ = ibv_create_cq(this->ib_ctx_, 1024, NULL, NULL, 0);
+    this->ib_cq_ = rdma_connection_->get_cq();
     // assert(this->ib_cq_ != NULL);
 
     for (int i = 0; i < conf->memory_num; i ++) {
@@ -71,7 +72,7 @@ int UDPNetworkManager::UDPCMInitServer(const struct GlobalConfig * conf) {
 UDPNetworkManager::UDPNetworkManager(const struct GlobalConfig * conf) {
     // initialize udp socket
     int ret = 0;
-    udp_sock_ = socket(AF_INET, SOCK_DGRAM, 0);
+    // udp_sock_ = socket(AF_INET, SOCK_DGRAM, 0);
     // assert(this->udp_sock_ >= 0);
 
     role_        = conf->role;
@@ -82,15 +83,28 @@ UDPNetworkManager::UDPNetworkManager(const struct GlobalConfig * conf) {
 
     stop_polling_ = false;
 
+    rdma_connection_ = new mralloc::RDMAConnection();
+    char port[6];
+    sprintf(port, "%u", udp_port_);
+    
+    rdma_connection_->init("10.0.0.63", "1145", mralloc::CONN_FUSEE);
+    // printf("start rdma create\n");
+    
+    malloc_connection_ = new mralloc::RDMAConnection();
+    malloc_connection_->init("10.0.0.63", "1145", mralloc::CONN_RPC);
+
+    // printf("finish rdma create\n");
+
+    // rdma_connection_->init_async();
     // create ib structs
-    ib_ctx_ = ib_get_ctx(conf->ib_dev_id, conf->ib_port_id);
+    ib_ctx_ = rdma_connection_->get_ctx();
     // assert(ib_ctx_ != NULL);
 
-    ib_pd_ = ibv_alloc_pd(this->ib_ctx_);
+    ib_pd_ = rdma_connection_->get_pd();
     // assert(ib_pd_ != NULL);
 
     ret = ibv_query_port(ib_ctx_, conf->ib_port_id, &ib_port_attr_);
-    // assert(ret == 0);
+    // // assert(ret == 0);
 
     ret = ibv_query_device(ib_ctx_, &ib_device_attr_);
     // assert(ret == 0);
@@ -115,7 +129,7 @@ UDPNetworkManager::UDPNetworkManager(const struct GlobalConfig * conf) {
 }
 
 UDPNetworkManager::~UDPNetworkManager() {
-    close(this->udp_sock_);
+    // close(this->udp_sock_);
     free(server_addr_list_);
 }
 
@@ -133,15 +147,16 @@ int UDPNetworkManager::client_connect_one_rc_qp(uint32_t server_id) {
 
     // TODO: using rdma_cma connect to create qp connection
 
-    rdma_connection_ = new mralloc::RDMAConnection();
+    // rdma_connection_ = new mralloc::RDMAConnection();
 
-    char port[6];
-    sprintf(port, "%u", ntohs(this->server_addr_list_[server_id].sin_port));
+    // char port[6];
+    // sprintf(port, "%u", ntohs(this->server_addr_list_[server_id].sin_port));
 
-    rdma_connection_->init(inet_ntoa(this->server_addr_list_[server_id].sin_addr), port, this->ib_ctx_, this->ib_pd_, this->ib_cq_, mralloc::CONN_FUSEE);
+    // rdma_connection_->connect_async(inet_ntoa(this->server_addr_list_[server_id].sin_addr), port, mralloc::CONN_FUSEE);
 
     // record this rc_qp
     this->rc_qp_list_[server_id] = rdma_connection_->get_qp();
+
     // record the memory info
     struct MrInfo * mr_info = (struct MrInfo *)malloc(sizeof(struct MrInfo));
     // memcpy(mr_info, &reply.body.conn_info.gc_info, sizeof(struct MrInfo));
@@ -154,12 +169,14 @@ int UDPNetworkManager::client_connect_one_rc_qp(uint32_t server_id) {
 int UDPNetworkManager::client_connect_one_rc_qp(uint32_t server_id, 
         __OUT struct MrInfo * mr_info) {
     
-    rdma_connection_ = new mralloc::RDMAConnection();
+    // rdma_connection_ = new mralloc::RDMAConnection();
 
-    char port[6];
-    sprintf(port, "%u", ntohs(this->server_addr_list_[server_id].sin_port));
+    // char port[6];
+    // sprintf(port, "%u", ntohs(this->server_addr_list_[server_id].sin_port));
 
-    rdma_connection_->init(inet_ntoa(this->server_addr_list_[server_id].sin_addr), port, mralloc::CONN_FUSEE);
+    // rdma_connection_->init(inet_ntoa(this->server_addr_list_[server_id].sin_addr), port, this->ib_ctx_, this->ib_pd_, this->ib_cq_, mralloc::CONN_FUSEE);
+    // rdma_connection_->connect_async(inet_ntoa(this->server_addr_list_[server_id].sin_addr), port, mralloc::CONN_FUSEE);
+
 
     // record this rc_qp
     this->rc_qp_list_[server_id] = rdma_connection_->get_qp();
@@ -302,7 +319,7 @@ int UDPNetworkManager::nm_rdma_write_inl_to_sid_sync(void * data, uint32_t size,
     //     __FUNCTION__, server_id, remote_addr, remote_rkey);
     
     int ret = rdma_post_send_batch_async(server_id, &sr);
-    // assert(ret == 0);
+    assert(ret == 0);
 
     std::map<uint64_t, struct ibv_wc *> wait_wrid_wc_map;
     wait_wrid_wc_map[0] = NULL;
@@ -332,7 +349,11 @@ int UDPNetworkManager::nm_rdma_write_inl_to_sid(void * data, uint32_t size, uint
     sr.wr.rdma.remote_addr = remote_addr;
     sr.wr.rdma.rkey = remote_rkey;
     
+    // TODO: error communication, fix it!!!!!!!!!
     int ret = rdma_post_send_batch_async(server_id, &sr);
+    if(ret){
+        printf("error, recieved rdma code: %d\n", ret);
+    }
     // assert(ret == 0);
 
     struct ibv_wc wc;
@@ -400,16 +421,16 @@ int UDPNetworkManager::nm_rdma_read_from_sid(void * local_addr, uint32_t local_l
     sr.wr.rdma.rkey = remote_rkey;
 
     int ret = rdma_post_send_batch_async(server_id, &sr);
-    // assert(ret == 0);
+    assert(ret == 0);
 
     struct ibv_wc wc;
     ret = rdma_poll_one_completion(&wc);
     if (wc.status != IBV_WC_SUCCESS) {
         printf("WC status: %d, wr_id: %ld\n", wc.status, wc.wr_id);
     }
-    // assert(wc.status == IBV_WC_SUCCESS);
-    // assert(wc.wr_id  == 101);
-    // assert(wc.opcode == IBV_WC_RDMA_READ);
+    assert(wc.status == IBV_WC_SUCCESS);
+    assert(wc.wr_id  == 101);
+    assert(wc.opcode == IBV_WC_RDMA_READ);
     return 0;
 }
 
@@ -634,7 +655,7 @@ int UDPNetworkManager::rdma_post_sr_list_batch_async(std::vector<IbvSrList *> & 
     for (sr_it = post_sr_map.begin(); sr_it != post_sr_map.end(); sr_it ++) {
         struct ibv_qp * send_qp = rc_qp_list_[sr_it->first]; 
         struct ibv_send_wr * bad_wr;
-        // print_log(DEBUG, "\t\t[%s]  post send to server(%d) qp(%x)", __FUNCTION__, sr_it->first, send_qp->qp_num);
+        // printf("\t\t[%s]  post send to server(%d) qp(%x)", __FUNCTION__, sr_it->first, send_qp->qp_num);
 
         // debug
         // for (bad_wr = sr_it->second; bad_wr != NULL; bad_wr = bad_wr->next) {
@@ -642,7 +663,7 @@ int UDPNetworkManager::rdma_post_sr_list_batch_async(std::vector<IbvSrList *> & 
         // }
 
         ret = ibv_post_send(send_qp, sr_it->second, &bad_wr);
-        // assert(ret == 0);
+        // printf("%d, %d\n", ret, errno);
     }
     return 0;
 }
@@ -663,10 +684,11 @@ int UDPNetworkManager::nm_poll_completion_sync(std::map<uint64_t, struct ibv_wc 
         // wrid_wc_map_lock_.lock();
         for (it = wait_wrid_wc_map.begin(); it != wait_wrid_wc_map.end(); it ++) {
             uint64_t wrid = it->first;
+            // printf("finding %lu\n", wrid);
             tbb::concurrent_hash_map<uint64_t, struct ibv_wc *>::const_accessor acc;
             if (wrid_wc_map_.find(acc, wrid)) {
                 wait_wrid_wc_map[wrid] = acc->second;
-                // print_log(DEBUG, "\t\t[%s fb%lx] erase %ld", __FUNCTION__, boost::this_fiber::get_id(), acc->first);
+                // printf("\t\t[%s fb%lx] erase %ld", __FUNCTION__, boost::this_fiber::get_id(), acc->first);
                 wrid_wc_map_.erase(acc);
             }
             // wrid_wc_map_.erase(find_it);
@@ -685,10 +707,11 @@ int UDPNetworkManager::nm_check_completion(std::map<uint64_t, struct ibv_wc *> &
     // should be locked
     for (it = wait_wrid_wc_map.begin(); it != wait_wrid_wc_map.end(); it ++) {
         uint64_t wrid = it->first;
+        // printf("finding %lu\n", wrid);
         tbb::concurrent_hash_map<uint64_t, struct ibv_wc *>::const_accessor acc;
         if (wrid_wc_map_.find(acc, wrid)) {
             wait_wrid_wc_map[wrid] = acc->second;
-            // print_log(DEBUG, "\t\t[%s fb%lx] erase %ld", __FUNCTION__, boost::this_fiber::get_id(), acc->first);
+            // printf("\t\t[%s fb%lx] erase %ld", __FUNCTION__, boost::this_fiber::get_id(), acc->first);
             wrid_wc_map_.erase(acc);
         }
     }
@@ -709,9 +732,11 @@ void UDPNetworkManager::nm_thread_polling() {
         // record polled wc to a map
         for (int i = 0; i < polled_num; i ++) {
             uint64_t wr_id = wc_buf[i].wr_id;
+            // printf("receive cq: %lu\n", wr_id);
             if (wc_buf[i].status != IBV_WC_SUCCESS) {
                 printf("%ld polled state %d (fb: %ld dst: %ld lwrid: %ld)\n", wr_id, wc_buf[i].status, 
                     (wr_id / 1000) >> 8, (wr_id / 1000) & 0xFF, wr_id % 1000);
+                return;
             }
             assert(wc_buf[i].status == IBV_WC_SUCCESS);
             // print_log(DEBUG, "\t\t[%s] %ld(fiber: %d dst: %d lwrid: %d) polled status(%d)", __FUNCTION__, wr_id, 
@@ -743,6 +768,7 @@ void UDPNetworkManager::nm_fiber_polling() {
         // record polled wc to a map
         for (int i = 0; i < polled_num; i ++) {
             uint64_t wr_id = wc_buf[i].wr_id;
+            // printf("receive cq: %lu\n", wr_id);
             // print_log(DEBUG, "\t\t[%s] %ld(fiber: %d dst: %d lwrid: %d) polled status(%d)", __FUNCTION__, wr_id, 
             //     (wr_id / 1000) >> 8, (wr_id / 1000) & 0xFF, wr_id % 1000, wc_buf[i].status);
             struct ibv_wc * store_wc = (struct ibv_wc *)malloc(sizeof(struct ibv_wc));

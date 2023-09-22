@@ -8,6 +8,9 @@
 
 #include "client.h"
 #include "micro_test.h"
+#include <gperftools/profiler.h>
+
+
 
 static void start_client_threads(char * op_type, int num_clients, GlobalConfig * config, 
         char * config_fname) {
@@ -103,12 +106,14 @@ int main(int argc, char ** argv) {
         printf("Usage: %s path-to-config-file num-clients\n", argv[0]);
         return 1;
     }
+    ProfilerStart("ycsbc.prof");
 
     int num_clients = atoi(argv[2]);
 
     GlobalConfig config;
     int ret = load_config(argv[1], &config);
     assert(ret == 0);
+    start_client_threads("INSERT", num_clients, &config, argv[1]);
+    ProfilerStop();
 
-    start_client_threads("INSERT", num_clients, &config, argv[1]);   
 }

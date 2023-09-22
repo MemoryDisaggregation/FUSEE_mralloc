@@ -36,9 +36,8 @@ private:
     struct sockaddr_in * server_addr_list_;
     uint32_t num_server_;
     uint32_t server_id_;
-    struct rdma_event_channel *cm_channel_;
-    struct rdma_cm_id *cm_id_;
     mralloc::RDMAConnection *rdma_connection_;
+    mralloc::RDMAConnection *malloc_connection_;
 
     struct ibv_context   * ib_ctx_;
     struct ibv_pd        * ib_pd_;
@@ -82,6 +81,10 @@ public:
 
     inline mralloc::RDMAConnection* get_rdma_connection() {
         return rdma_connection_;
+    }
+
+    inline mralloc::RDMAConnection* get_alloc_connection() {
+        return malloc_connection_;
     }
 
 public:

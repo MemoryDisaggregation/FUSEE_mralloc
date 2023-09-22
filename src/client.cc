@@ -56,17 +56,24 @@ Client::Client(const struct GlobalConfig * conf) {
     server_st_addr_     = conf->server_base_addr;
     server_data_len_    = conf->server_data_len;
     micro_workload_num_ = conf->micro_workload_num;
+    printf("%d start nm init\n", my_server_id_);
 
     // create cm
     nm_ = new UDPNetworkManager(conf);
+    printf("%d create nm\n", my_server_id_);
 
     int ret = connect_ib_qps();
     // assert(ret == 0);
     gettimeofday(&connection_recover_et_, NULL);
 
+    printf("%d nm init\n", my_server_id_);
+
     // create mm
     mm_ = new ClientMM(conf, nm_);
     gettimeofday(&mm_recover_et_, NULL);
+
+    printf("%d mm init\n", my_server_id_);
+
 
     // alloc mr
     IbInfo ib_info;
@@ -75,10 +82,11 @@ Client::Client(const struct GlobalConfig * conf) {
     printf("allocating %ld\n", local_buf_sz);
     local_buf_ = mmap(NULL, local_buf_sz, PROT_READ | PROT_WRITE, 
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
-    // assert(local_buf_ != MAP_FAILED);
+    assert(local_buf_ != MAP_FAILED);
     local_buf_mr_ = ibv_reg_mr(ib_info.ib_pd, local_buf_, local_buf_sz, 
         IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
-    // print_log(DEBUG, "register mr addr(0x%lx) rkey(%x)", local_buf_mr_->addr, local_buf_mr_->rkey);
+    assert(local_buf_ != NULL);
+    // printf("register mr addr(0x%lx) rkey(%x)", local_buf_mr_->addr, local_buf_mr_->rkey);
     
     race_root_ = (RaceHashRoot *)malloc(sizeof(RaceHashRoot));
     // assert(race_root_ != NULL);
@@ -102,6 +110,8 @@ Client::Client(const struct GlobalConfig * conf) {
         coro_local_addr_list_[i] = (uint64_t)local_buf_ + CORO_LOCAL_BUF_LEN * i;
     }
 
+    printf("%d mr init\n", my_server_id_);
+
     stop_gc_ = false;
 
     gettimeofday(&local_mr_reg_et_, NULL);
@@ -119,16 +129,20 @@ Client::Client(const struct GlobalConfig * conf) {
 
         if (my_server_id_ - conf->memory_num == 0) {
             // init table
+            printf("%d start init\n", my_server_id_);
             ret = init_hash_table();
             // kv_assert(ret == 0);
-
+            printf("%d init hash table finish\n", my_server_id_);
             ret = sync_init_finish();
             // kv_assert(ret == 0);
+            printf("%d init hash finish\n", my_server_id_);
 
             ret = get_race_root();
             // kv_assert(ret == 0);
         } else {
+            printf("%d wait for init finish\n", my_server_id_);
             while (!init_is_finished());
+            printf("%d find init finish\n", my_server_id_);
             ret = get_race_root();
             // kv_assert(ret == 0);
         }
@@ -763,6 +777,7 @@ IbvSrList * Client::gen_write_kv_sr_lists(uint32_t coro_id, KVInfo * a_kv_info, 
         sr[i].wr.rdma.remote_addr = r_mm_info->addr_list[i];
         sr[i].wr.rdma.rkey        = r_mm_info->rkey_list[i];
         sr[i].next    = NULL;
+        // sr[i].send_flags = IBV_SEND_SIGNALED;
 
         ret_sr_list[i].sr_list   = &sr[i];
         ret_sr_list[i].num_sr    = 1;
@@ -802,6 +817,8 @@ IbvSrList * Client::gen_write_del_log_sr_lists(uint32_t coro_id, KVInfo * a_kv_i
         sr[i].wr.rdma.remote_addr = r_mm_info->addr_list[i];
         sr[i].wr.rdma.rkey        = r_mm_info->rkey_list[i];
         sr[i].next    = NULL;
+        // sr[i].send_flags = IBV_SEND_SIGNALED;
+
 
         ret_sr_list[i].sr_list   = &sr[i];
         ret_sr_list[i].num_sr    = 1;
@@ -4225,6 +4242,7 @@ void * client_ops_fb_cnt_ops_micro(void * arg) {
         KVReqCtx * ctx = &fiber_args->client->kv_req_ctx_list_[idx + fiber_args->ops_st_idx];
         ctx->coro_id = fiber_args->coro_id;
         ctx->should_stop = fiber_args->should_stop;
+        // printf("begin! %d\n", ctx->req_type);
 
         switch (ctx->req_type) {
         case KV_REQ_SEARCH:
@@ -4240,6 +4258,7 @@ void * client_ops_fb_cnt_ops_micro(void * arg) {
                 ctx->key_str[2] ++;
             }
             do {
+                // printf("KV_OPS_FAIL_REDO!\n");
                 ret = fiber_args->client->kv_insert(ctx);
             } while (ret == KV_OPS_FAIL_REDO);
             if (ret == KV_OPS_FAIL_RETURN) {

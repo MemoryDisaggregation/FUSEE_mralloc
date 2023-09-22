@@ -43,7 +43,7 @@ struct PData {
   uint64_t buf_addr;
   uint32_t buf_rkey;
   uint32_t size;
-  uint32_t init_rkey;
+  // uint32_t init_rkey;
 };
 
 struct CmdMsgBlock {

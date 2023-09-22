@@ -293,6 +293,7 @@ private:
         while (ib_is_all_wrid_finished(wait_wrid_wc_map) == false) {
             boost::this_fiber::sleep_for(std::chrono::microseconds(10));
             ret = nm_->nm_check_completion(wait_wrid_wc_map);
+            // printf("%d\n",ret);
         }
         return ret;
     }

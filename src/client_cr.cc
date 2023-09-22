@@ -1251,7 +1251,7 @@ int ClientCR::sync_init_finish() {
     for (int i = num_replication_ - 1; i >= 0; i --) {
         ret = nm_->nm_rdma_write_inl_to_sid(&local_msg, sizeof(uint64_t), 
             remote_global_meta_addr_, server_mr_info_map_[i]->rkey, i);
-        // assert(ret == 0);
+        assert(ret == 0);
     }
     return 0;
 }
@@ -1260,7 +1260,7 @@ bool ClientCR::init_is_finished() {
     int ret = 0;
     ret = nm_->nm_rdma_read_from_sid(local_buf_, local_buf_mr_->lkey, 
         sizeof(uint64_t), remote_global_meta_addr_, server_mr_info_map_[0]->rkey, 0);
-    // assert(ret == 0);
+    assert(ret == 0);
     uint64_t read_value = *(uint64_t *)local_buf_;
     if (read_value == 1) {
         return true;

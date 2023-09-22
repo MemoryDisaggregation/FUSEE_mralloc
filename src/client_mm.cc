@@ -431,10 +431,10 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
         // TODO: using shared cpu cache to fill 
-        nm->get_rdma_connection()->remote_fetch_fast_block(addr, rkey);
+        nm->get_alloc_connection()->remote_fetch_fast_block(addr, rkey);
     } else {
         // assert(alloc_type == TYPE_SUBTABLE);
-        nm->get_rdma_connection()->remote_fusee_alloc(addr, rkey);
+        nm->get_alloc_connection()->remote_fusee_alloc(addr, rkey);
     }
     // serialize_kvmsg(&request);
 

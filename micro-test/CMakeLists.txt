@@ -34,6 +34,7 @@ target_link_libraries(micro_test
 
 target_link_libraries(micro_test_multi_client
     micro_test
+    profiler
     libddckv
     pthread
     ibverbs
