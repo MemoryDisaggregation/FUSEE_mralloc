@@ -1,6 +1,7 @@
 #include "client_mm.h"
 
 #include <bits/stdint-uintn.h>
+#include <cstdio>
 #include <unistd.h>
 #include <assert.h>
 #include <sys/time.h>
@@ -48,6 +49,9 @@ ClientMM::ClientMM(const struct GlobalConfig * conf, UDPNetworkManager * nm) {
 
     // construct block mapping
     get_block_map();
+
+    cpu_cache_ = new mralloc::cpu_cache(mm_block_sz_);
+    assert(cpu_cache!=NULL);
 
     if (conf->is_recovery == false) {
         // allocate initial blocks
@@ -431,7 +435,20 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
         // TODO: using shared cpu cache to fill 
-        nm->get_alloc_connection()->remote_fetch_fast_block(addr, rkey);
+        // nm->get_alloc_connection()->remote_fetch_fast_block(addr, rkey);
+        bool result;
+        do {
+        unsigned cpu;
+        unsigned node;
+        if(getcpu(&cpu,&node)==-1){
+            printf("getcpu bad \n");
+            return 1;
+        }
+        result = cpu_cache_->fetch_cache(cpu, addr, rkey); 
+        // if(result == false){
+        //     printf("false!\n");
+        // }
+        }while (result == false);
     } else {
         // assert(alloc_type == TYPE_SUBTABLE);
         nm->get_alloc_connection()->remote_fusee_alloc(addr, rkey);

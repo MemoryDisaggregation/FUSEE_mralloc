@@ -25,6 +25,7 @@ target_link_libraries(ycsb_test
 )
 
 target_link_libraries(ycsb_test_multi_client
+    profiler
     libddckv
     ycsb_test
     ibverbs

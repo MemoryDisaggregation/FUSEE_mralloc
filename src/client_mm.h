@@ -15,6 +15,7 @@
 #include "nm.h"
 #include "spinlock.h"
 #include "hashtable.h"
+#include "cpu_cache.h"
 
 #define MAX_NUM_SUBBLOCKS 4
 #define MAX_WATER_MARK 0.7
@@ -70,6 +71,7 @@ typedef struct TagSubblockInfo {
 
 class ClientMM {
 private:
+    mralloc::cpu_cache* cpu_cache_;
     uint32_t num_replication_;
     uint32_t num_idx_rep_;
     uint32_t num_memory_;

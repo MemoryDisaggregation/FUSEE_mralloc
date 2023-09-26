@@ -5,12 +5,14 @@
 
 #include "client.h"
 #include "ycsb_test.h"
+#include <gperftools/profiler.h>
 
 int main(int argc, char ** argv) {
     if (argc != 4) {
         printf("Usage: %s path-to-config-file workload-name num-clients\n", argv[0]);
         return 1;
     }
+    ProfilerStart("ycsbc.prof");
 
     WorkloadFileName * workload_fnames = get_workload_fname(argv[2]);
     int num_clients = atoi(argv[3]);
@@ -57,4 +59,6 @@ int main(int argc, char ** argv) {
     printf("total: %d ops\n", total_tpt);
     printf("failed: %d ops\n", total_failed);
     printf("tpt: %d ops/s\n", (total_tpt - total_failed) / config.workload_run_time);
+    ProfilerStop();
+
 }

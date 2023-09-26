@@ -38,7 +38,7 @@ public:
             // ring buffer read and write pointer
             read_p_ = (uint32_t*)shared_cpu_cache_;
             write_p_ = (uint32_t*)shared_cpu_cache_ + nprocs;
-            content_ = (item*)(shared_cpu_cache_ + nprocs);
+            content_ = (item*)(write_p_ + nprocs);
             // init all cpu ring buffer with -1
             for (int i = 0; i < nprocs; i++) {
                 read_p_[i] = 0;
@@ -53,7 +53,7 @@ public:
             shared_cpu_cache_ = (uint64_t*)mmap(NULL, sizeof(item) * nprocs * (max_item) + 2 * sizeof(uint32_t) * nprocs, port_flag, mm_flag, fd, 0);
             read_p_ = (uint32_t*)shared_cpu_cache_;
             write_p_ = (uint32_t*)shared_cpu_cache_ + nprocs;
-            content_ = (item*)(shared_cpu_cache_ + nprocs);
+            content_ = (item*)(write_p_ + nprocs);
         }
     }
 
@@ -78,10 +78,10 @@ public:
         // just fetch one block in the current cpu_id --> ring buffer
         item fetch_one = content_[nproc * max_item + read_p_[nproc]];
         if(fetch_one.addr != -1) {
-            content_[nproc * max_item + read_p_[nproc]].addr = -1;
-            read_p_[nproc] = (read_p_[nproc] + 1) % max_item;
             addr = fetch_one.addr;
             rkey = fetch_one.rkey;
+            content_[nproc * max_item + read_p_[nproc]].addr = -1;
+            read_p_[nproc] = (read_p_[nproc] + 1) % max_item;
             return true;
         }
         else{
