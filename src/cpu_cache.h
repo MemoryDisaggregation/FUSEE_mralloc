@@ -12,7 +12,7 @@
 
 namespace mralloc {
 
-const uint32_t nprocs = 32;
+const uint32_t nprocs = 80;
 const uint32_t max_item = 1024;
 
 class cpu_cache{

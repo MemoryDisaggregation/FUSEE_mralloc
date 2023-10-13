@@ -1,6 +1,7 @@
 #ifndef DDCKV_CLIENT_MM_H_
 #define DDCKV_CLIENT_MM_H_
 
+#include <bits/stdint-uintn.h>
 #include <infiniband/verbs.h>
 
 #include <vector>
@@ -210,6 +211,14 @@ public:
 
     inline uint32_t get_num_mm_blocks() {
         return mm_blocks_.size();
+    }
+
+    inline std::vector<ClientMMBlock *>* get_mm_blocks() {
+        return &mm_blocks_;
+    }
+
+    inline uint64_t get_bitmap_size() {
+        return bmap_block_num_ * subblock_sz_;
     }
 
     inline bool should_alloc_new() {

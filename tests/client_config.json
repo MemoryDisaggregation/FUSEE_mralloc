@@ -12,15 +12,17 @@
     "ib_gid_idx": 0,
 
     "server_base_addr":  "0x10000000",
-    "server_data_len":   8589934592,
-    "block_size":        262144,
-    "subblock_size":     256,
+    "server_data_len":   34359738368,
+    "block_size":        4096,
+    "subblock_size":     1024,
     "client_local_size": 8589934592,
 
     "num_replication": 1,
     "num_idx_rep": 1,
-    "num_coroutines": 15,
-    "miss_rate_threash": 0.1,
+    "num_coroutines": 8,
+    "miss_rate_threash": 0,
+    "micro_workload_num": 100000,
+    "workload_run_time": 10,
     
     "main_core_id": 0,
     "poll_core_id": 1,

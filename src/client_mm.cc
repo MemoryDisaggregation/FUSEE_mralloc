@@ -2,6 +2,8 @@
 
 #include <bits/stdint-uintn.h>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <unistd.h>
 #include <assert.h>
 #include <sys/time.h>
@@ -286,16 +288,20 @@ void ClientMM::mm_free(uint64_t orig_slot_val) {
     uint32_t subblock_8byte_offset = subblock_id / 64;
     
     uint64_t bmap_addr = block_raddr + subblock_8byte_offset * sizeof(uint64_t);
-    uint64_t add_value = 1 << (subblock_id % 64);
+    uint64_t add_value = (uint64_t)1 << (subblock_id % 64);
     if (bmap_addr > block_raddr + subblock_sz_ * bmap_block_num_) {
         printf("Error free!\n");
         exit(1);
     }
 
-    char tmp[256] = {0};
-    sprintf(tmp, "%ld@%d", bmap_addr, slot.server_id);
+    char tmp[256] = {'\0'};
+    sprintf(tmp, "%lu@%d", bmap_addr, slot.server_id);
     std::string addr_str(tmp);
+    // printf("%lu @ %u\n", add_value, subblock_id);
+    // if(free_faa_map_.find(addr_str) != free_faa_map_.end())
     free_faa_map_[addr_str] += add_value;
+    // else
+        // free_faa_map_.insert(std::map<std::string, uint64_t>::value_type(addr_str, add_value));
 }
 
 void ClientMM::mm_free_cur(const ClientMMAllocCtx * ctx) {
@@ -435,20 +441,20 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
         // TODO: using shared cpu cache to fill 
-        // nm->get_alloc_connection()->remote_fetch_fast_block(addr, rkey);
-        bool result;
-        do {
-        unsigned cpu;
-        unsigned node;
-        if(getcpu(&cpu,&node)==-1){
-            printf("getcpu bad \n");
-            return 1;
+        if(1)
+            nm->get_alloc_connection()->remote_fetch_fast_block(addr, rkey);
+        else{
+            bool result;
+            do {
+            unsigned cpu;
+            unsigned node;
+            if(getcpu(&cpu,&node)==-1){
+                printf("getcpu bad \n");
+                return 1;
+            }
+            result = cpu_cache_->fetch_cache(cpu, addr, rkey); 
+            }while (result == false);
         }
-        result = cpu_cache_->fetch_cache(cpu, addr, rkey); 
-        // if(result == false){
-        //     printf("false!\n");
-        // }
-        }while (result == false);
     } else {
         // assert(alloc_type == TYPE_SUBTABLE);
         nm->get_alloc_connection()->remote_fusee_alloc(addr, rkey);

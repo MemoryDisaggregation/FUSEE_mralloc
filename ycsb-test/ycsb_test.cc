@@ -465,7 +465,7 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
     ret = client.load_kv_requests(workload_fnames->trans_fname, 0, 100000);
     assert(ret == 0);
 
-    client.start_gc_fiber();
+    // client.start_gc_fiber();
     printf("Test phase start\n");
     boost::fibers::barrier global_barrier(client.num_coroutines_ + 1);
     ClientFiberArgs * fb_args_list = (ClientFiberArgs *)malloc(sizeof(ClientFiberArgs) * client.num_coroutines_);
@@ -511,7 +511,8 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
         num_failed += fb_args_list[i].num_failed;
         printf("fb%d finished\n", fb_args_list[i].coro_id);
     }
-    client.stop_gc_fiber();
+    // client.stop_gc_fiber();
+    args->free_size = client.free_batch();
     printf("thread: %d %d ops/s\n", args->thread_id, ops_cnt / client.workload_run_time_);
     printf("%d failed\n", num_failed);
     args->ret_num_ops = ops_cnt;
@@ -710,7 +711,7 @@ int load_test_cnt_ops_mt_on_crash_cont_sample(Client & client, WorkloadFileName 
     ret = client.load_kv_requests(workload_fnames->trans_fname, 0, 100000);
     assert(ret == 0);
 
-    client.start_gc_fiber();
+    // client.start_gc_fiber();
     printf("Test phase start\n");
     boost::fibers::barrier global_barrier(client.num_coroutines_ + 1);
     volatile bool should_stop = false;
@@ -769,7 +770,8 @@ int load_test_cnt_ops_mt_on_crash_cont_sample(Client & client, WorkloadFileName 
         failed_num_vec[k] = num_failed;
     }
 
-    client.stop_gc_fiber();
+    // client.stop_gc_fiber();
+    // client.free_batch();
 
     char out_fname[128];
     int my_server_id = client.get_my_server_id();
@@ -1063,7 +1065,7 @@ void * run_client(void * _args) {
     // ret = load_test_cnt_time(client, workload_fnames);
     ret = load_test_cnt_ops_mt(client, workload_fnames, args);
     assert(ret == 0);
-
+    // client.free_batch();
     client.stop_polling_thread();
     pthread_join(polling_tid, NULL);
     return 0;

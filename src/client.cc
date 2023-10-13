@@ -1,6 +1,8 @@
 #include "client.h"
 
 #include <assert.h>
+#include <bits/stdint-uintn.h>
+#include <cstdlib>
 #include <sys/mman.h>
 #include <stdio.h>
 #include <sys/time.h>
@@ -10,6 +12,7 @@
 #include <vector>
 #include <fstream>
 
+#include "client_mm.h"
 #include "kv_debug.h"
 
 #define READ_BUCKET_ST_WRID 100
@@ -1916,6 +1919,7 @@ void Client::modify_primary_idx(KVReqCtx * ctx) {
     ctx->ret_val.ret_code = KV_OPS_SUCCESS;
     if (ctx->req_type == KV_REQ_UPDATE || ctx->req_type == KV_REQ_DELETE)
         mm_->mm_free(ctx->kv_modify_pr_cas_list[0].orig_value);
+        // mm_->mm_free_cur(&ctx->mm_alloc_ctx);
 
     if (ctx->use_cache && ctx->req_type != KV_REQ_DELETE) {
         uint64_t r_slot_addr_list[num_idx_rep_];
@@ -1996,6 +2000,7 @@ void Client::modify_primary_idx_sync(KVReqCtx * ctx) {
     ctx->ret_val.ret_code = 0;
     if (ctx->req_type == KV_REQ_UPDATE || ctx->req_type == KV_REQ_DELETE)
         mm_->mm_free(ctx->kv_modify_pr_cas_list[0].orig_value);
+        // mm_->mm_free_cur(&ctx->mm_alloc_ctx);
 
     if (ctx->use_cache && ctx->req_type != KV_REQ_DELETE) {
         uint64_t r_slot_addr_list[num_idx_rep_];
@@ -4995,14 +5000,18 @@ void Client::get_recover_time(std::vector<struct timeval> & recover_time) {
     recover_time.push_back(kv_ops_recover_et_);
 }
 
-void Client::free_batch() {
+uint64_t Client::free_batch() {
     printf("start free\n");
     std::unordered_map<std::string, uint64_t> faa_map(mm_->free_faa_map_);
     mm_->free_faa_map_.clear();
     for (auto it = faa_map.begin(); it != faa_map.end(); it ++) {
         uint64_t target_addr;
         uint8_t  target_sid;
-        sscanf(it->first.c_str(), "%ld@%d", &target_addr, &target_sid);
+        long read_addr; int read_sid;
+        sscanf(it->first.c_str(), "%ld@%d", &read_addr, &read_sid);
+        target_addr = read_addr; target_sid = read_sid;
+        // printf("addr:%ld\n", target_addr);
+        // printf("addr: %ld@%d, send:%lx\n", target_addr, target_sid, it->second);
         struct ibv_send_wr faa_wr;
         struct ibv_sge faa_sge;
         memset(&faa_wr, 0, sizeof(struct ibv_send_wr));
@@ -5012,20 +5021,84 @@ void Client::free_batch() {
         faa_sge.lkey = transient_buf_mr_->lkey;
 
         faa_wr.wr_id = ib_gen_wr_id(2333, target_sid, FAA_WRID, 0);
+        std::map<uint64_t, struct ibv_wc *> wait_wrid_wc_map;
+
+        wait_wrid_wc_map[faa_wr.wr_id] = NULL;
         faa_wr.next = NULL;
         faa_wr.sg_list = &faa_sge;
         faa_wr.num_sge = 1;
         faa_wr.opcode = IBV_WR_ATOMIC_FETCH_AND_ADD;
-        faa_wr.send_flags = 0;
+        faa_wr.send_flags = IBV_SEND_SIGNALED;
         faa_wr.wr.atomic.remote_addr = target_addr;
         faa_wr.wr.atomic.rkey = nm_->get_server_rkey(target_sid);
         faa_wr.wr.atomic.compare_add = it->second;
 
         nm_->rdma_post_send_batch_async(target_sid, &faa_wr);
-        boost::this_fiber::yield();
-        if (stop_gc_ == true) 
-            return;
+        uint64_t ret = nm_->nm_poll_completion_sync(wait_wrid_wc_map);
+        assert(ret == 0);
+        if (wait_wrid_wc_map[faa_wr.wr_id]->status != IBV_WC_SUCCESS) {
+            printf("wc error\n");
+        }
+        // TODO: this yield make the gc uncompletely?
+        // boost::this_fiber::yield();
+        // if (stop_gc_ == true) 
+        //     return;
     }
+    // printf("poll finished\n");
+    // sleep(20);
+    // if (wait_wrid_wc_map[1]->status != IBV_WC_SUCCESS) {
+    //     printf("wc error\n");
+    // }
+    uint64_t free_sum = 0;
+    for (auto it = mm_->get_mm_blocks()->begin(); it != mm_->get_mm_blocks()->end(); it ++) {
+        ClientMMBlock* block_ = *it;
+        uint64_t addr_ = block_->mr_info_list[0].addr;
+        uint32_t rkey_ = block_->mr_info_list[0].rkey;
+        uint64_t size_ = mm_->get_bitmap_size();
+        char* buffer_ = (char*)malloc(size_);
+        nm_->get_alloc_connection()->remote_read(buffer_, size_, addr_, rkey_);
+        uint32_t offset_ = size_/mm_->subblock_sz_/64;
+        uint32_t left_ = size_/mm_->subblock_sz_%64;
+        uint64_t* data_ = (uint64_t*)buffer_;
+        // printf("target addr:%lu, value:%lx %lx\n", addr_, data_[0], data_[1]);
+        // for(int i=0;i<size_/8;i++){
+        //     if(data_[i] != 0)
+        //         printf("%lu ", data_[i]);
+        //     else {
+        //         if(i!=0)
+        //             printf("\n");
+        //         break;
+        //     }
+        // }
+        uint64_t num_ = mm_->mm_block_sz_ / mm_->subblock_sz_ - size_/mm_->subblock_sz_ + left_;
+        bool is_freed = true;
+        while (left_ != 0 ){
+            data_[offset_] |= (uint64_t)1 << (left_-1);
+            left_ -- ;
+        }
+        for(int i=offset_; i<size_/8; i++){
+            // printf("%lu\n", data_[i]);
+            int idx = 64;
+            while(idx && num_){
+                if(!((data_[i] & (uint64_t)1) == 1)){
+                    is_freed = false;
+                    break;
+                }
+                data_[i] >>= 1;
+                idx --; num_ --;
+            }
+            if(!is_freed || num_ == 0)
+                break;
+        }
+        if(is_freed){
+            //TODO: free the block addr_
+            free_sum += mm_->mm_block_sz_;
+        }
+        free(buffer_);
+    }
+    // printf("%lu\n", free_sum);
+    return free_sum;
+
 }
 
 void * client_gc_fb(void * arg) {
@@ -5041,8 +5114,8 @@ void * client_gc_fb(void * arg) {
         }
 
         client->free_batch();
-
         // TODO: gc
+        
     }
 }
 

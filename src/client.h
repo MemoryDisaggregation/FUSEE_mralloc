@@ -1,6 +1,7 @@
 #ifndef DDCKV_CLIENT_H_
 #define DDCKV_CLIENT_H_
 
+#include <bits/stdint-uintn.h>
 #include <map>
 
 #include <pthread.h>
@@ -527,7 +528,7 @@ public:
     void start_gc_fiber();
     void stop_gc_fiber();
 
-    void free_batch();
+    uint64_t free_batch();
 
     void init_kvreq_space(uint32_t coro_id, uint32_t kv_req_st_idx, uint32_t num_ops);
     void init_kv_insert_space(void * coro_local_addr, uint32_t kv_req_idx);

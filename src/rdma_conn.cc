@@ -455,13 +455,13 @@ int RDMAConnection::init(const std::string ip, const std::string port, uint8_t a
     return -1;
   }
 
-  printf("start\n");
+  // printf("start\n");
 
   if (rdma_get_cm_event(m_cm_channel_, &event)) {
     perror("rdma_get_cm_event fail");
     return -1;
   }
-  printf("end\n");
+  // printf("end\n");
 
   if (event->event != RDMA_CM_EVENT_ESTABLISHED) {
     perror("RDMA_CM_EVENT_ESTABLISHED fail");
@@ -478,6 +478,7 @@ int RDMAConnection::init(const std::string ip, const std::string port, uint8_t a
   if (access_type == CONN_FUSEE){
     m_fusee_rkey =  server_pdata.buf_rkey;
   }
+  conn_id_ = server_pdata.id;
   assert(server_pdata.size == sizeof(CmdMsgBlock));
 
   // printf("private data, addr: %ld: rkey:%d, size: %d\n",
@@ -541,8 +542,10 @@ int RDMAConnection::rdma_remote_read(uint64_t local_addr, uint32_t lkey,
   send_wr.send_flags = IBV_SEND_SIGNALED;
   send_wr.wr.rdma.remote_addr = remote_addr;
   send_wr.wr.rdma.rkey = rkey;
-  if (ibv_post_send(m_cm_id_->qp, &send_wr, &bad_send_wr)) {
+  uint32_t res;
+  if ((res = ibv_post_send(m_cm_id_->qp, &send_wr, &bad_send_wr))) {
     perror("ibv_post_send fail");
+    printf("Errno: %u\n ", res);
     return -1;
   }
 
@@ -670,6 +673,7 @@ int RDMAConnection::register_remote_memory(uint64_t &addr, uint32_t &rkey,
   RegisterRequest *request = (RegisterRequest *)m_cmd_msg_;
   request->resp_addr = (uint64_t)m_cmd_resp_;
   request->resp_rkey = m_resp_mr_->rkey;
+  request->id = conn_id_;
   request->type = MSG_REGISTER;
   request->size = size;
   m_cmd_msg_->notify = NOTIFY_WORK;
@@ -710,6 +714,7 @@ int RDMAConnection::remote_fetch_fast_block(uint64_t &addr, uint32_t &rkey){
   RequestsMsg *request = (RequestsMsg *)m_cmd_msg_;
   request->resp_addr = (uint64_t)m_cmd_resp_;
   request->resp_rkey = m_resp_mr_->rkey;
+  request->id = conn_id_;
   request->type = MSG_FETCH_FAST;
   m_cmd_msg_->notify = NOTIFY_WORK;
 
@@ -749,6 +754,7 @@ int RDMAConnection::remote_mw(uint64_t addr, uint32_t rkey, uint64_t size, uint3
   MWbindRequest *request = (MWbindRequest *)m_cmd_msg_;
   request->resp_addr = (uint64_t)m_cmd_resp_;
   request->resp_rkey = m_resp_mr_->rkey;
+  request->id = conn_id_;
   request->type = MSG_MW_BIND;
   request->size = size;
   request->rkey = rkey;
@@ -790,6 +796,7 @@ int RDMAConnection::remote_fetch_block(uint64_t &addr, uint32_t &rkey, uint64_t 
   FetchRequest *request = (FetchRequest *)m_cmd_msg_;
   request->resp_addr = (uint64_t)m_cmd_resp_;
   request->resp_rkey = m_resp_mr_->rkey;
+  request->id = conn_id_;
   request->type = MSG_FETCH;
   request->size = size;
   m_cmd_msg_->notify = NOTIFY_WORK;
@@ -830,6 +837,7 @@ int RDMAConnection::remote_fusee_alloc(uint64_t &addr, uint32_t &rkey){
   RequestsMsg *request = (RequestsMsg *)m_cmd_msg_;
   request->resp_addr = (uint64_t)m_cmd_resp_;
   request->resp_rkey = m_resp_mr_->rkey;
+  request->id = conn_id_;
   request->type = RPC_FUSEE_SUBTABLE;
   m_cmd_msg_->notify = NOTIFY_WORK;
 
