@@ -209,7 +209,7 @@ int ClientMM::get_new_block_from_server(UDPNetworkManager * nm) {
         mr_info_list[i + 1].rkey = rkey;
         server_id_list[i + 1] = sid;
     }
-
+    // printf("[block] addr(%lx), rkey(%u)\n", mr_info_list[0].addr, mr_info_list[0].rkey);
     ret = reg_new_space(mr_info_list, server_id_list, nm, TYPE_KVBLOCK);
     // assert(ret == 0);
     return 0;
@@ -411,7 +411,7 @@ void ClientMM::mm_alloc_subtable(UDPNetworkManager * nm, __OUT ClientMMAllocSubt
         ctx[i].server_id = server_id;
         // print_log(DEBUG, "allocating subtable on %d %lx", server_id, mr_info_list[i].addr);
     }
-
+    // printf("[subtable] addr(%lx), rkey(%u)\n", mr_info_list[0].addr, mr_info_list[0].rkey);
     ret = reg_new_space(mr_info_list, server_id_list, nm, TYPE_SUBTABLE);
     // assert(ret == 0);
 }
@@ -474,6 +474,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     // }
     mr_info->addr = addr;
     mr_info->rkey = rkey;
+    rkey_map_[addr] = rkey;
     // memcpy(mr_info, &reply.body.mr_info, sizeof(struct MrInfo));
     return 0;
 }
@@ -527,10 +528,10 @@ int ClientMM::reg_new_space(const struct MrInfo * mr_info_list, const uint8_t * 
     // print_log(DEBUG, "[%s] send meta info to remote", __FUNCTION__);
     for (int i = 0; i < num_replication_; i ++) {
         // [mralloc support]
-        uint32_t rkey = mr_info_list[i].rkey;
-        // uint32_t rkey = nm->get_server_rkey(i);
-        // print_log(DEBUG, "[%s] writing to server(%d) addr(%lx) rkey(%x)", 
-        //     __FUNCTION__, i, client_meta_addr_, rkey);
+        // uint32_t rkey = mr_info_list[i].rkey;
+        uint32_t rkey = nm->get_server_rkey(i);
+        // printf("[%s] writing to server(%d) addr(%lx) rkey(%x)", 
+            // __FUNCTION__, i, client_meta_addr_, rkey);
         ret = nm->nm_rdma_write_inl_to_sid(&meta_info, sizeof(ClientMetaAddrInfo),
             client_meta_addr_, rkey, i);
         // assert(ret == 0);

@@ -112,7 +112,7 @@ private:
     std::deque<SubblockInfo> subblock_free_queue_;
     SubblockInfo             last_allocated_info_;
 
-
+    std::map<uint64_t, uint32_t> rkey_map_;
 
     // std::map<std::string, std::queue<SubblockInfo>> allocated_subblock_key_map_;
 
@@ -202,6 +202,8 @@ public:
     void free_recover_buf();
 
     void get_time_bread_down(std::vector<struct timeval> & time_vec);
+
+    uint32_t get_rkey(uint64_t addr) {return rkey_map_[addr - addr % mm_block_sz_];}
 
 // inline public methods
 public:

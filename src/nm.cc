@@ -92,7 +92,7 @@ UDPNetworkManager::UDPNetworkManager(const struct GlobalConfig * conf) {
     
     malloc_connection_ = new mralloc::RDMAConnection();
     malloc_connection_->init("10.0.0.63", "1145", mralloc::CONN_RPC);
-
+    sleep(10);
     // printf("finish rdma create\n");
 
     // rdma_connection_->init_async();
@@ -359,7 +359,7 @@ int UDPNetworkManager::nm_rdma_write_inl_to_sid(void * data, uint32_t size, uint
     struct ibv_wc wc;
     ret = rdma_poll_one_completion(&wc);
     if (wc.status != IBV_WC_SUCCESS) {
-        // print_log(DEBUG, "WC status(%d) id(%ld)", wc.status, wc.wr_id);
+        printf("WC status(%d) id(%ld) addr(%lx) rkey(%u)", wc.status, wc.wr_id, remote_addr, remote_rkey);
     }
     // assert(wc.status == IBV_WC_SUCCESS);
     // assert(wc.wr_id  == 100);
@@ -424,9 +424,11 @@ int UDPNetworkManager::nm_rdma_read_from_sid(void * local_addr, uint32_t local_l
     assert(ret == 0);
 
     struct ibv_wc wc;
-    ret = rdma_poll_one_completion(&wc);
+    ret = rdma_poll_one_completion(&wc);\
+    assert(wc.status == IBV_WC_SUCCESS);
+
     if (wc.status != IBV_WC_SUCCESS) {
-        printf("WC status: %d, wr_id: %ld\n", wc.status, wc.wr_id);
+        printf("WC status: %d, wr_id: %ld, addr: %lx, rkey: %u\n", wc.status, wc.wr_id, remote_addr, remote_rkey);
     }
     assert(wc.status == IBV_WC_SUCCESS);
     assert(wc.wr_id  == 101);
@@ -707,9 +709,9 @@ int UDPNetworkManager::nm_check_completion(std::map<uint64_t, struct ibv_wc *> &
     // should be locked
     for (it = wait_wrid_wc_map.begin(); it != wait_wrid_wc_map.end(); it ++) {
         uint64_t wrid = it->first;
-        // printf("finding %lu\n", wrid);
         tbb::concurrent_hash_map<uint64_t, struct ibv_wc *>::const_accessor acc;
         if (wrid_wc_map_.find(acc, wrid)) {
+            // printf("finding %lu\n", wrid);
             wait_wrid_wc_map[wrid] = acc->second;
             // printf("\t\t[%s fb%lx] erase %ld", __FUNCTION__, boost::this_fiber::get_id(), acc->first);
             wrid_wc_map_.erase(acc);
@@ -739,6 +741,8 @@ void UDPNetworkManager::nm_thread_polling() {
                 return;
             }
             assert(wc_buf[i].status == IBV_WC_SUCCESS);
+            // printf("receive cq: %lu, opcode %d, rkey: %u\n", wr_id, wc_buf[i].opcode, wc_buf[i].invalidated_rkey);
+
             // print_log(DEBUG, "\t\t[%s] %ld(fiber: %d dst: %d lwrid: %d) polled status(%d)", __FUNCTION__, wr_id, 
             //     (wr_id / 1000) >> 8, (wr_id / 1000) & 0xFF, wr_id % 1000, wc_buf[i].status);
             struct ibv_wc * store_wc = (struct ibv_wc *)malloc(sizeof(struct ibv_wc));

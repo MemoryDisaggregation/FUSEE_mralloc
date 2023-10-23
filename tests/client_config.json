@@ -13,13 +13,13 @@
 
     "server_base_addr":  "0x10000000",
     "server_data_len":   34359738368,
-    "block_size":        4096,
+    "block_size":        2097152,
     "subblock_size":     1024,
     "client_local_size": 8589934592,
 
     "num_replication": 1,
     "num_idx_rep": 1,
-    "num_coroutines": 8,
+    "num_coroutines": 1,
     "miss_rate_threash": 0,
     "micro_workload_num": 100000,
     "workload_run_time": 10,

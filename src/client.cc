@@ -124,11 +124,11 @@ Client::Client(const struct GlobalConfig * conf) {
         mm_->get_log_head(&pr_log_server_id_, &pr_log_head_);
         pr_log_tail_ = pr_log_head_;
         ret = write_client_meta_info();
-        // assert(ret == 0);
+        assert(ret == 0);
 
         // get root
         ret = get_race_root();
-        // kv_assert(ret == 0);
+        kv_assert(ret == 0);
 
         if (my_server_id_ - conf->memory_num == 0) {
             // init table
@@ -172,6 +172,7 @@ int Client::connect_ib_qps() {
         ret = nm_->client_connect_one_rc_qp(i, gc_info);
         // assert(ret == 0);
         server_mr_info_map_[i] = gc_info;
+        printf("\n");
         // print_log(DEBUG, "connect to server(%d) addr(%lx) rkey(%x)", i, server_mr_info_map_[i]->addr, server_mr_info_map_[i]->rkey);
     }
     return 0;
@@ -186,7 +187,7 @@ int Client::write_client_meta_info() {
 
     for (int i = 0; i < num_replication_; i ++) {
         struct MrInfo * cur_mr_info = server_mr_info_map_[i];
-        // print_log(DEBUG, "write meta info to server(%d) addr(0x%lx) rkey(%x) len(%d)", i, cur_mr_info->addr, cur_mr_info->rkey, sizeof(ClientLogMetaInfo));
+        printf("write meta info to server(%d) addr(0x%lx) rkey(%x) len(%d)", i, cur_mr_info->addr, cur_mr_info->rkey, sizeof(ClientLogMetaInfo));
         ret = nm_->nm_rdma_write_inl_to_sid(&meta_info, sizeof(ClientLogMetaInfo), remote_meta_addr_, cur_mr_info->rkey, i);
         // assert(ret == 0);
     }
@@ -648,7 +649,9 @@ void Client::get_kv_addr_info(KVHashInfo * a_kv_hash_info, __OUT KVTableAddrInfo
         a_kv_addr_info->f_bucket_addr[i]  = r_subtable_off[i] + f_idx * sizeof(RaceHashBucket);
         a_kv_addr_info->s_bucket_addr[i]  = r_subtable_off[i] + s_idx * sizeof(RaceHashBucket);
         a_kv_addr_info->f_bucket_addr_rkey[i] = server_mr_info_map_[target_server_id]->rkey;
+        // a_kv_addr_info->f_bucket_addr_rkey[i] = mm_->get_rkey(a_kv_addr_info->f_bucket_addr[i]);
         a_kv_addr_info->s_bucket_addr_rkey[i] = server_mr_info_map_[target_server_id]->rkey;
+        // a_kv_addr_info->s_bucket_addr_rkey[i] = mm_->get_rkey(a_kv_addr_info->s_bucket_addr[i]);
     }
     // print_log(DEBUG, "\t  [%s] search from server(%d) subtable_addr(%lx)", __FUNCTION__, pr_server_id, r_subtable_off);
 }
@@ -779,6 +782,7 @@ IbvSrList * Client::gen_write_kv_sr_lists(uint32_t coro_id, KVInfo * a_kv_info, 
         sr[i].opcode  = IBV_WR_RDMA_WRITE;
         sr[i].wr.rdma.remote_addr = r_mm_info->addr_list[i];
         sr[i].wr.rdma.rkey        = r_mm_info->rkey_list[i];
+        // printf("%lu-write memory: %lx of %u\n", sr[i].wr_id, sr[i].wr.rdma.remote_addr, sr[i].wr.rdma.rkey );
         sr[i].next    = NULL;
         // sr[i].send_flags = IBV_SEND_SIGNALED;
 
@@ -871,6 +875,7 @@ IbvSrList * Client::gen_read_kv_sr_lists(uint32_t coro_id, const std::vector<KVR
             sr[i].opcode  = IBV_WR_RDMA_READ;
             sr[i].wr.rdma.remote_addr = it->second[i].r_kv_addr;
             sr[i].wr.rdma.rkey = it->second[i].rkey;
+            // sr[i].wr.rdma.rkey = mm_->get_rkey(it->second[i].r_kv_addr);
             if (i != it->second.size() - 1) {
                 sr[i].next = &sr[i + 1];
             }
@@ -989,6 +994,7 @@ void Client::fill_invalid_addr(KVReqCtx * ctx, RaceHashSlot * local_slot) {
     ctx->kv_invalid_addr.r_kv_addr = HashIndexConvert40To64Bits(local_slot->pointer);
     ctx->kv_invalid_addr.server_id = local_slot->server_id;
     ctx->kv_invalid_addr.rkey = server_mr_info_map_[ctx->kv_invalid_addr.server_id]->rkey;
+    // ctx->kv_invalid_addr.rkey = mm_->get_rkey(ctx->kv_invalid_addr.r_kv_addr)
 }
 
 IbvSrList * Client::gen_read_cache_kv_sr_lists(uint32_t coro_id, RaceHashSlot * local_slot_ptr, uint64_t local_addr) {
@@ -1009,6 +1015,8 @@ IbvSrList * Client::gen_read_cache_kv_sr_lists(uint32_t coro_id, RaceHashSlot * 
     sr->opcode = IBV_WR_RDMA_READ;
     sr->wr.rdma.remote_addr = HashIndexConvert40To64Bits(local_slot_ptr->pointer);
     sr->wr.rdma.rkey        = server_mr_info_map_[local_slot_ptr->server_id]->rkey;
+    // sr->wr.rdma.rkey = mm_->get_rkey(sr->wr.rdma.remote_addr);
+
     sr->next = NULL;
 
     ret_sr_list->sr_list = sr;
@@ -2731,6 +2739,7 @@ void Client::kv_insert_read_buckets_and_write_kv_sync(KVReqCtx * ctx) {
     // 2. update kv header and prepare log commit addr
     update_log_tail(tail, &ctx->mm_alloc_ctx);
     prepare_log_commit_addrs(ctx);
+    // rkey_map_[ctx->mm_alloc_ctx.addr_list]
 
     // 2. generate send requests (write_kv and read_bucket)
     // print_log(DEBUG, "\t[%s fb%d %ld]   2. generate send request", __FUNCTION__, ctx->coro_id, boost::this_fiber::get_id());
