@@ -15,6 +15,8 @@ target_compile_options(ycsb_test_client
 
 target_compile_options(ycsb_test_multi_client
     PRIVATE
+    ${CMAKE_CXX_FLAGS_DEBUG}
+    "-gdwarf-4"
     "-g"
 )
 

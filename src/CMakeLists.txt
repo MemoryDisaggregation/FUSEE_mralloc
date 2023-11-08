@@ -17,6 +17,7 @@ target_compile_options(
     PRIVATE
     "-O2"
     # ${CMAKE_CXX_FLAGS_DEBUG}
+    "-gdwarf-4"
     "-g"
     # "-D_DEBUG"
 )

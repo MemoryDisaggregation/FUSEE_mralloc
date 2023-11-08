@@ -89,9 +89,10 @@ UDPNetworkManager::UDPNetworkManager(const struct GlobalConfig * conf) {
     
     rdma_connection_->init("10.0.0.63", "1145", mralloc::CONN_FUSEE);
     // printf("start rdma create\n");
-    
+    sleep(1);
     malloc_connection_ = new mralloc::RDMAConnection();
     malloc_connection_->init("10.0.0.63", "1145", mralloc::CONN_RPC);
+    // malloc_connection_->malloc_hint(uint64_t start, uint64_t idx)
     sleep(10);
     // printf("finish rdma create\n");
 
@@ -161,7 +162,7 @@ int UDPNetworkManager::client_connect_one_rc_qp(uint32_t server_id) {
     struct MrInfo * mr_info = (struct MrInfo *)malloc(sizeof(struct MrInfo));
     // memcpy(mr_info, &reply.body.conn_info.gc_info, sizeof(struct MrInfo));
     mr_info->addr = 0x10000000;
-    mr_info->rkey = rdma_connection_->get_rkey();
+    mr_info->rkey = rdma_connection_->get_global_rkey();
     this->mr_info_list_[server_id] = mr_info;
     return 0;
 }
@@ -184,9 +185,9 @@ int UDPNetworkManager::client_connect_one_rc_qp(uint32_t server_id,
     // record this rc_qp
     struct MrInfo * new_mr_info = (struct MrInfo *)malloc(sizeof(struct MrInfo));
     new_mr_info->addr = 0x10000000;
-    new_mr_info->rkey = rdma_connection_->get_rkey();
+    new_mr_info->rkey = rdma_connection_->get_global_rkey();
     mr_info->addr = 0x10000000;
-    mr_info->rkey = rdma_connection_->get_rkey();
+    mr_info->rkey = rdma_connection_->get_global_rkey();
     rc_qp_list_[server_id] = rdma_connection_->get_qp();
     mr_info_list_[server_id] = new_mr_info;
     // return the memory info

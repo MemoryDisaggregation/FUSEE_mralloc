@@ -2,7 +2,7 @@
  * @Author: Blahaj Wang && wxy1999@mail.ustc.edu.cn
  * @Date: 2023-07-24 10:13:26
  * @LastEditors: Blahaj Wang && wxy1999@mail.ustc.edu.cn
- * @LastEditTime: 2023-09-15 16:43:55
+ * @LastEditTime: 2023-10-23 15:33:57
  * @FilePath: /rmalloc_newbase/include/msg.h
  * @Description: 
  * 
@@ -20,7 +20,8 @@ namespace mralloc {
 #define NOTIFY_WORK 0xFF
 #define NOTIFY_IDLE 0x00
 #define MAX_MSG_SIZE 64
-#define MAX_SERVER_WORKER 32
+#define MAX_SERVER_WORKER 1
+#define MAX_SERVER_CLIENT 40
 #define RESOLVE_TIMEOUT_MS 5000
 #define RDMA_TIMEOUT_US 10000000  // 10s
 #define MAX_REMOTE_SIZE (1UL << 25)
@@ -44,7 +45,13 @@ struct PData {
   uint32_t buf_rkey;
   uint32_t size;
   uint8_t id;
-  // uint32_t init_rkey;
+  uint64_t header_addr;
+  uint64_t rkey_addr;
+  uint64_t block_addr;
+  uint64_t block_num;
+  uint64_t base_size;
+  uint64_t fast_size;
+  uint32_t global_rkey;
 };
 
 struct CmdMsgBlock {

@@ -51,9 +51,8 @@ ClientMM::ClientMM(const struct GlobalConfig * conf, UDPNetworkManager * nm) {
 
     // construct block mapping
     get_block_map();
-
-    cpu_cache_ = new mralloc::cpu_cache(mm_block_sz_);
-    assert(cpu_cache!=NULL);
+    // cpu_cache_ = new mralloc::cpu_cache(mm_block_sz_);
+    // assert(cpu_cache_!=NULL);
 
     if (conf->is_recovery == false) {
         // allocate initial blocks
@@ -441,8 +440,10 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
         // TODO: using shared cpu cache to fill 
-        if(1)
+        if(0)
             nm->get_alloc_connection()->remote_fetch_fast_block(addr, rkey);
+        else if (1)
+            nm->get_alloc_connection()->fetch_mem_one_sided(addr, rkey);
         else{
             bool result;
             do {
