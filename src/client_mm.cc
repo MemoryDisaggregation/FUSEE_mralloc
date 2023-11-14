@@ -85,7 +85,7 @@ ClientMM::~ClientMM() {
         free(mm_blocks_[i]);
     }
     mm_blocks_.clear();
-    // printf("!!!!!!!!n_dyn_req: %d\n", n_dyn_req_);
+    printf("avg time %luus\n", avg_time_);
 }
 
 // Statically map memory blocks
@@ -440,7 +440,9 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
         // TODO: using shared cpu cache to fill 
-        if(0)
+        struct timeval start, end;
+        gettimeofday(&start, NULL);
+        if(1)
             nm->get_alloc_connection()->remote_fetch_fast_block(addr, rkey);
         else if (1)
             nm->get_alloc_connection()->fetch_mem_one_sided(addr, rkey);
@@ -456,6 +458,11 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
             result = cpu_cache_->fetch_cache(cpu, addr, rkey); 
             }while (result == false);
         }
+        gettimeofday(&end, NULL);
+        uint64_t time =  end.tv_usec + end.tv_sec*1000*1000 - start.tv_usec - start.tv_sec*1000*1000;
+        avg_time_ = (avg_time_*count_ + time)/(count_ + 1);
+        count_ += 1;
+        // printf("avgtime: %lu\n", avg_time_);
     } else {
         // assert(alloc_type == TYPE_SUBTABLE);
         nm->get_alloc_connection()->remote_fusee_alloc(addr, rkey);

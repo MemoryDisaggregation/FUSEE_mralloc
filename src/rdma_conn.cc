@@ -526,6 +526,7 @@ int RDMAConnection::init(const std::string ip, const std::string port, uint8_t a
   // update_rkey_metadata();
   last_alloc_ = 0;
   full_bitmap = (bool*)malloc(m_one_side_info_.m_block_num*sizeof(bool));
+  memset(full_bitmap, false, sizeof(bool)*m_one_side_info_.m_block_num);
 
   return 0;
 }
@@ -986,7 +987,7 @@ bool RDMAConnection::fetch_mem_one_sided(uint64_t &addr, uint32_t &rkey) {
   int old_item = 0;
   uint64_t free_index;
   for(int i = 0; i < block_num-user_start_; i++) {
-    while(block_.bitmap != ~(uint64_t)0) {
+    if(block_.bitmap != ~(uint64_t)0) {
         // find valid bit, try to allocate 
         uint64_t result;
         do{
@@ -998,9 +999,11 @@ bool RDMAConnection::fetch_mem_one_sided(uint64_t &addr, uint32_t &rkey) {
               get_global_rkey());
             // printf("bitmap result = %lu\n", result);
         } while (result != block_.bitmap && (block_.bitmap = result) != ~(uint64_t)0);
-        if(block_.bitmap == ~(uint64_t)0) {
+        if(block_.bitmap != ~(uint64_t)0) {
           // printf("block full\n");
-          break;
+          addr = m_one_side_info_.m_block_addr_ + (block_.offset * large_block_items + free_index) * m_one_side_info_.m_fast_size;
+          rkey = get_global_rkey();
+          return true;
         }
         // if(block_.header[free_index].flag % 2 == 1){
         //   printf("old value!\n");
@@ -1018,20 +1021,25 @@ bool RDMAConnection::fetch_mem_one_sided(uint64_t &addr, uint32_t &rkey) {
         //   old_item++;
         //   update_mem_metadata(block_.offset);
         // } else {
-          addr = m_one_side_info_.m_block_addr_ + (block_.offset * large_block_items + free_index) * m_one_side_info_.m_fast_size;
           // rkey = rkey_list[index];
-          rkey = get_global_rkey();
           // printf("addr:%lx, rkey:%u\n", addr, rkey);
-          return true;
         // }
     }
     full_bitmap[block_.offset] = true;
-    int offset = (block_.offset - user_start_ + 1)%(block_num-user_start_) + user_start_;
-    while(full_bitmap[offset]){
-      offset = (offset - user_start_ + 1)%(block_num-user_start_) + user_start_;
+    uint64_t offset; bool find = false;
+    for (int j = 1; j <= block_num - user_start_; j++){
+      offset = (block_.offset - user_start_ + j)%(block_num-user_start_) + user_start_;
+      if(!full_bitmap[offset]){
+        block_.offset = offset;
+        update_mem_bitmap(offset);
+        find = true;
+        break;
+      }
     }
-    block_.offset = offset;
-    update_mem_bitmap(offset);
+    if(!find) {
+      return false;
+    }
+    // printf("find one\n");
     // printf("costly operations\n");
     // update_mem_metadata(offset);
   }

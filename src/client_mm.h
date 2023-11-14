@@ -180,6 +180,9 @@ public:
     std::unordered_map<uint64_t, std::vector<uint64_t> > alloc_block_map_;
     std::unordered_map<uint64_t, std::vector<uint64_t> > total_block_map_;
 
+    uint64_t count_ = 0;
+    uint64_t avg_time_ = 0;
+
     // for free
     std::unordered_map<std::string, uint64_t> free_faa_map_;
 

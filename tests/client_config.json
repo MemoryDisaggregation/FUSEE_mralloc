@@ -12,9 +12,9 @@
     "ib_gid_idx": 0,
 
     "server_base_addr":  "0x10000000",
-    "server_data_len":   34359738368,
-    "block_size":        32768,
-    "subblock_size":     1024,
+    "server_data_len":   64424509440,
+    "block_size":        8192,
+    "subblock_size":     256,
     "client_local_size": 8589934592,
 
     "num_replication": 1,
