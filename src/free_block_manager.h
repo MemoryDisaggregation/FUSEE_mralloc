@@ -1,8 +1,8 @@
 /*
  * @Author: Blahaj Wang && wxy1999@mail.ustc.edu.cn
  * @Date: 2023-08-11 16:42:26
- * @LastEditors: Blahaj Wang && wxy1999@mail.ustc.edu.cn
- * @LastEditTime: 2023-11-08 15:16:45
+ * @LastEditors: blahaj wxy1999@mail.ustc.edu.cn
+ * @LastEditTime: 2023-11-22 22:12:11
  * @FilePath: /rmalloc_newbase/include/free_block_manager.h
  * @Description: Buddy tree for memory management 
  * 
@@ -11,6 +11,7 @@
 #pragma once
 
 #include <bits/stdint-uintn.h>
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cstdio>
@@ -21,6 +22,19 @@ namespace mralloc {
 
 const uint64_t large_block_items = 64;
 
+const uint64_t max_region_num = 2048;
+const uint64_t region_per_section = 32;
+const uint64_t block_per_region = 32;
+const uint64_t page_size = 1024*1024*2;
+const uint64_t block_class_num = 16;
+
+enum alloc_advise {
+    alloc_empty,
+    alloc_no_class,
+    alloc_class,
+    alloc_exclusive
+};
+
 struct block_header_e {
     uint8_t max_length;
     uint8_t alloc_history;
@@ -30,6 +44,11 @@ struct block_header_e {
 
 typedef std::atomic<block_header_e> block_header;
 typedef std::atomic<uint64_t> bitmap64;
+typedef uint32_t bitmap32;
+typedef uint16_t bitmap16;
+
+const bitmap16 bitmap16_filled = ~(uint16_t)0;
+const bitmap32 bitmap32_filled = ~(uint32_t)0;
 
 struct large_block {
     bitmap64 bitmap;
@@ -39,6 +58,39 @@ struct large_block {
     uint64_t offset;
 };
 
+struct section_e {
+    bitmap32 class_map_;
+    bitmap32 alloc_map_;
+};
+
+typedef std::atomic<section_e> section;
+
+// typedef std::atomic<uint16_t> fast_class;
+struct fast_class_e {
+    uint16_t offset[4];
+};
+
+typedef std::atomic<fast_class_e> fast_class;
+
+struct region_e {
+    bitmap32 base_map_;
+    // 1x32M, 2x32M, ..., 16x32M
+    uint16_t block_class_ : 4;
+    // if exclusive_ = 0, this whole 1GB region is exclusive to some client
+    // or it is used by an allocation of multiple GB memory
+    uint16_t exclusive_ : 1;
+    uint16_t offset_ : 11;
+    bitmap16 class_map_;
+};
+
+typedef std::atomic<region_e> region;
+
+struct region_with_rkey {
+    region_e region;
+    uint32_t rkey[block_per_region];
+};
+
+
 struct large_block_lockless {
     uint64_t bitmap;
     block_header_e header[large_block_items];
@@ -47,31 +99,219 @@ struct large_block_lockless {
     uint64_t offset;
 };
 
+inline int free_bit_in_bitmap32(uint32_t bitmap) {
+    return 32 - __builtin_popcount(bitmap);
+}
+
+inline int free_bit_in_bitmap16(uint16_t bitmap) {
+    return 16 - __builtin_popcount(bitmap);
+}
+
+inline int free_bit_in_bitmap64(uint64_t bitmap) {
+    return 64 - __builtin_popcount(bitmap);
+}
+
+inline int find_free_index_from_bitmap64_tail(uint64_t bitmap) {
+    if(~bitmap == 0) return -1;
+    return __builtin_ctzl(~bitmap);
+}
+
+inline int find_free_index_from_bitmap32_tail(uint32_t bitmap) {
+    if(~bitmap == 0) return -1;
+    return __builtin_ctz(~bitmap);
+}
+
+inline int find_free_index_from_bitmap16_tail(uint16_t bitmap) {
+    if(bitmap == 0xffff) return -1;
+    if(bitmap == 0) return 0;
+    return __builtin_ctz(~bitmap);
+}
+
+inline int find_free_index_from_bitmap64_lead(uint64_t bitmap) {
+    if(~bitmap == 0) return -1;
+    return 63-__builtin_clzl(~bitmap);
+}
+
+inline int find_free_index_from_bitmap32_lead(uint32_t bitmap) {
+    if(~bitmap == 0) return -1;
+    return 31-__builtin_clz(~bitmap);
+}
+
 class FreeBlockManager{
 public:
 struct remote_addr {
     uint64_t addr;
     uint32_t rkey;
 } ;
-    FreeBlockManager(uint64_t fast_size): fast_size_(fast_size) {};
+    FreeBlockManager(uint64_t block_size): block_size_(block_size) {};
     ~FreeBlockManager() {};
     virtual bool init(uint64_t addr, uint64_t size, uint32_t rkey) {return true;};
     virtual bool init(uint64_t meta_addr, uint64_t addr, uint64_t size, uint32_t rkey) {return true;};
     virtual void init_size_align(uint64_t addr, uint64_t size, uint64_t &init_addr, uint64_t &init_size) {};
     virtual bool fetch(uint64_t size, uint64_t &addr, uint32_t &rkey) {return true;};
     virtual bool fetch(uint64_t start_addr, uint64_t size, uint64_t &addr, uint32_t &rkey) {return true;};
-    virtual bool return_back(uint64_t addr, uint64_t size, uint32_t rkey) {return 0;};
-    virtual bool fetch_fast(uint64_t &addr, uint32_t &rkey) {return true;};
+    virtual bool fill_block(uint64_t addr, uint64_t size, uint32_t rkey) {return 0;};
+    virtual bool fetch_block(uint64_t &addr, uint32_t &rkey) {return true;};
     virtual void print_state() {};
-    uint64_t get_fast_size() {return fast_size_;};
+    uint64_t get_block_size() {return block_size_;};
 protected:
-    uint64_t fast_size_;
+    uint64_t block_size_;
+};
+
+class ServerBlockManager {
+public:
+    ServerBlockManager(uint64_t block_size):block_size_(block_size) {
+        region_size_ = block_size_ * block_per_region;
+        section_size_ = region_size_ * region_per_section;
+    };
+    ~ServerBlockManager() {};
+    
+    inline uint64_t num_align_upper(uint64_t num, uint64_t align) {
+        return (num + align - 1) - ((num + align - 1) % align);
+    }
+
+    void init_align_hint(uint64_t &addr, uint64_t &size, uint64_t &init_addr, uint64_t &init_size) {
+        uint64_t align = region_size_ < page_size ? page_size : region_size_;
+        size = num_align_upper(size, align);
+        if(cal_header_size() > page_size) {
+            printf("too large memory region, out of range!\n");
+        }
+        init_size = size + page_size;
+        init_addr = num_align_upper(addr, align);
+        addr = init_addr + page_size;
+        assert(init_addr % page_size == 0);
+    };
+
+    uint64_t cal_header_size() {
+        uint64_t section_header_size = max_region_num/region_per_section * sizeof(section);
+        uint64_t fast_region_size = block_class_num * sizeof(fast_class);
+        uint64_t region_header_size = max_region_num * sizeof(region);
+        uint64_t block_rkey_size = max_region_num * block_per_region * sizeof(uint32_t);
+        return section_header_size + fast_region_size + region_header_size + block_rkey_size;
+    };
+
+    bool init(uint64_t meta_addr, uint64_t addr, uint64_t size, uint32_t rkey);
+
+    uint64_t get_heap_start() {return heap_start_;};
+    bool update_section(region_e region, alloc_advise advise);
+    bool find_section(section_e &alloc_section, uint32_t &section_offset, alloc_advise advise) ;
+
+    bool fetch_large_region(section_e &alloc_section, uint32_t section_offset, uint64_t region_num, uint64_t &addr) ;
+    bool fetch_region(section_e &alloc_section, uint32_t section_offset, uint32_t block_class, bool shared, region_e &alloc_region) ;
+    bool try_add_fast_region(uint32_t section_offset, uint32_t block_class, region_e &alloc_region);
+    bool set_region_exclusive(region_e &alloc_region);
+    bool set_region_empty(region_e &alloc_region);
+    
+
+    inline uint32_t get_fast_region_index(uint32_t section_offset, uint32_t block_class) {return section_offset/4*block_class_num + block_class;};
+    inline uint64_t get_section_region_addr(uint32_t section_offset, uint32_t region_offset) {return heap_start_ + section_offset*section_size_ + region_offset * region_size_ ;};
+    inline uint64_t get_region_addr(region_e region) {return heap_start_ + region.offset_ * region_size_;};
+    inline uint64_t get_region_block_addr(region_e region, uint32_t block_offset) {return heap_start_ + region.offset_ * region_size_ + block_offset * block_size_;} ;
+    inline uint32_t get_region_block_rkey(region_e region, uint32_t block_offset) {return block_rkey_[region.offset_*block_per_region + block_offset];};
+    inline uint32_t get_region_class_block_rkey(region_e region, uint32_t block_offset) {return class_block_rkey_[region.offset_*block_per_region + block_offset];};
+
+    bool init_region_class(region_e &alloc_region, uint32_t block_class, bool is_exclusive);
+    bool fetch_region_block(region_e &alloc_region, uint64_t &addr, uint32_t &rkey, bool is_exclusive) ;
+    bool fetch_region_class_block(region_e &alloc_region, uint32_t block_class, uint64_t &addr, uint32_t &rkey, bool is_exclusive) ;
+
+    inline bool set_block_rkey(uint64_t index, uint32_t rkey) {block_rkey_[index] = rkey; return true;};
+    inline bool set_class_block_rkey(uint64_t index, uint32_t rkey) {class_block_rkey_[index] = rkey; return true;};
+
+    inline uint64_t get_block_num() {return block_num_;};
+
+    inline uint64_t get_block_size() {return block_size_;};
+
+    inline uint64_t get_block_addr(uint64_t index) {return heap_start_ + index * block_size_;};
+
+    // inline block_header get_block_header(uint64_t index) {return header_list[index];};
+
+    inline uint64_t get_metadata() {return (uint64_t)section_header_;};
+
+    inline uint32_t get_block_rkey(uint64_t index) {return block_rkey_[index];};
+
+    inline uint64_t get_block_index(uint64_t addr) {return (addr-heap_start_)/block_size_;}
+
+    bool fetch(uint64_t size, uint64_t &addr, uint32_t &rkey) {return true;};
+
+    bool fetch(uint64_t start_addr, uint64_t size, uint64_t &addr, uint32_t &rkey) ;
+
+    bool fill_block(uint64_t addr, uint64_t size, uint32_t rkey) {return true;};
+
+    bool fetch_block(uint64_t &addr, uint32_t &rkey) ;
+
+    void print_state() {};
+    
+private:
+
+    std::mutex m_mutex_;
+
+    /*
+    --------------------------------  <-- mmap addr ( - 2 MiB)
+    << section header >>
+    32 region per section with 8Byte
+    2048 region, 4096 bit
+    64 section x 8 Byte
+    using 2bit to a region:
+        00-empty
+        01-not full, can set certain class
+        10-not full, already set certain class
+        11-full, or exclusive
+    0 --> : varaint GB region 
+    <-- 2047 : a single GB region
+    --------------------------------
+    << fast region >>
+    16 class x 64 x 8 Byte
+    each class has 64 region of that class size
+    --------------------------------
+    << region_header >>
+    2048 x 8 Byte
+    offset is never changed
+    --------------------------------
+    << block_rkey >>
+    2048 x 32 x 4 Byte
+    -------------------------------- 
+    << class_block_rkey >>
+    2048 x 32 x 4 Byte 
+    --------------------------------
+    << unused alignment space >>
+    --------------------------------  <-- heap start ( 0 )
+
+    */
+
+    // basic info
+    uint64_t block_size_;
+    uint64_t block_num_;
+    uint64_t region_size_;
+    uint64_t region_num_;
+    uint64_t section_size_;
+    uint64_t section_num_;
+    uint32_t global_rkey_;
+
+    // info before heap segment
+    section* section_header_;
+    fast_class* fast_region_;
+    region* region_header_;
+    uint32_t* block_rkey_;
+    uint32_t* class_block_rkey_;
+
+    // info of heap segment
+    uint64_t heap_start_;
+    uint64_t heap_size_;
+
+    // info helping accelerate
+struct cache_info{
+    uint64_t current_section_;
+    region region_block_cache_;
+    region region_class_cache_[block_class_num];
+    section section_cache_;  
+} cache_info_;
+    
 };
 
 class ServerBlockManagerv2: public FreeBlockManager{
 public:
     ServerBlockManagerv2(uint64_t block_size, uint64_t base_size):FreeBlockManager(block_size), base_size(base_size) {
-        if(fast_size_/base_size > 32) {
+        if(block_size_/base_size > 32) {
             printf("bitmap cannot store too much bsae page!\n");
         }
     };
@@ -82,12 +322,13 @@ public:
     }
 
     void init_size_align(uint64_t addr, uint64_t size, uint64_t &init_addr, uint64_t &init_size) override {
-        uint64_t align = fast_size_ * large_block_items;
+        uint64_t align = block_size_*large_block_items < 1024*1024*2 ? 1024*1024*2 : block_size_*large_block_items;
+        uint64_t base_align = block_size_ < 1024*1024*2 ? 1024*1024*2 : block_size_;
         init_size = num_align_upper(size, align);
-        uint64_t block_header_size = num_align_upper(init_size / align * sizeof(large_block), align);
+        uint64_t block_header_size = num_align_upper(init_size / align * sizeof(large_block),base_align);
         init_size += block_header_size;
         init_addr = addr - block_header_size;
-        assert(init_addr % align == 0);
+        assert(init_addr % base_align == 0);
     };
 
     bool init(uint64_t meta_addr, uint64_t addr, uint64_t size, uint32_t rkey) override;
@@ -99,11 +340,11 @@ public:
         return false;
     };
 
-    inline uint64_t get_base_num() {return fast_size_/base_size;};
+    inline uint64_t get_base_num() {return block_size_/base_size;};
 
-    inline uint64_t get_block_num() {return block_num;};
+    inline uint64_t get_block_num() {return large_block_num;};
 
-    inline uint64_t get_block_addr(uint64_t index) {return heap_start + index * fast_size_;};
+    inline uint64_t get_block_addr(uint64_t index) {return heap_start + index * block_size_;};
 
     inline uint64_t get_block_addr() {return heap_start;};
 
@@ -113,7 +354,7 @@ public:
 
     inline uint32_t get_block_rkey(uint64_t index) {return block_info[index / large_block_items].rkey[index % large_block_items];};
 
-    inline uint64_t get_block_index(uint64_t addr) {return (addr-heap_start)/fast_size_;}
+    inline uint64_t get_block_index(uint64_t addr) {return (addr-heap_start)/block_size_;}
 
     inline uint64_t get_base_size() {return base_size;};
 
@@ -121,9 +362,9 @@ public:
 
     bool fetch(uint64_t start_addr, uint64_t size, uint64_t &addr, uint32_t &rkey) override;
 
-    bool return_back(uint64_t addr, uint64_t size, uint32_t rkey) override {return true;};
+    bool fill_block(uint64_t addr, uint64_t size, uint32_t rkey) override {return true;};
 
-    bool fetch_fast(uint64_t &addr, uint32_t &rkey) override ;
+    bool fetch_block(uint64_t &addr, uint32_t &rkey) override ;
 
     void print_state() override {};
     
@@ -143,7 +384,7 @@ private:
 
     uint64_t heap_size;
 
-    uint64_t block_num;
+    uint64_t large_block_num;
 
     uint64_t last_alloc;
 
@@ -151,14 +392,14 @@ private:
     
 };
 
-class ServerBlockManager: public FreeBlockManager{
+class ServerBlockManagerv1: public FreeBlockManager{
 public:
-    ServerBlockManager(uint64_t block_size, uint64_t base_size):FreeBlockManager(block_size), base_size(base_size) {
-        if(fast_size_/base_size > 32) {
+    ServerBlockManagerv1(uint64_t block_size, uint64_t base_size):FreeBlockManager(block_size), base_size(base_size) {
+        if(block_size_/base_size > 32) {
             printf("bitmap cannot store too much bsae page!\n");
         }
     };
-    ~ServerBlockManager() {};
+    ~ServerBlockManagerv1() {};
     
     bool init(uint64_t addr, uint64_t size, uint32_t rkey) override ;
 
@@ -170,21 +411,22 @@ public:
         return true;
     };
 
-    inline uint64_t get_base_num() {return fast_size_/base_size;};
+    inline uint64_t get_base_num() {return block_size_/base_size;};
 
-    inline uint64_t get_block_num() {return block_num;};
+    inline uint64_t get_block_num() {return large_block_num;};
 
-    inline uint64_t get_block_addr(uint64_t index) {return heap_start + index * fast_size_;};
+    inline uint64_t get_block_addr(uint64_t index) {return heap_start + index * block_size_;};
 
     inline uint64_t get_block_addr() {return heap_start;};
 
+    // inline block_header get_block_header(uint64_t index) {return header_list[index];};
     // inline block_header get_block_header(uint64_t index) {return header_list[index];};
 
     inline block_header* get_metadata() {return header_list;};
 
     inline uint32_t get_block_rkey(uint64_t index) {return block_rkey_list[index];};
 
-    inline uint64_t get_block_index(uint64_t addr) {return (addr-heap_start)/fast_size_;}
+    inline uint64_t get_block_index(uint64_t addr) {return (addr-heap_start)/block_size_;}
 
     inline uint64_t get_base_size() {return base_size;};
 
@@ -194,9 +436,9 @@ public:
 
     bool fetch(uint64_t start_addr, uint64_t size, uint64_t &addr, uint32_t &rkey) override;
 
-    bool return_back(uint64_t addr, uint64_t size, uint32_t rkey) override {return true;};
+    bool fill_block(uint64_t addr, uint64_t size, uint32_t rkey) override {return true;};
 
-    bool fetch_fast(uint64_t &addr, uint32_t &rkey) override ;
+    bool fetch_block(uint64_t &addr, uint32_t &rkey) override ;
 
     void print_state() override {};
     
@@ -216,7 +458,7 @@ private:
 
     uint64_t heap_size;
 
-    uint64_t block_num;
+    uint64_t large_block_num;
 
     std::atomic<uint64_t> last_alloc;
 
@@ -224,86 +466,12 @@ private:
     
 };
 
-class ClientBlockManager: public FreeBlockManager{
+class ClientBlockManager: public FreeBlockManager {
 public:
-
-    ClientBlockManager(uint64_t block_size, uint64_t base_size):FreeBlockManager(block_size), base_size(base_size) {
-        if(fast_size_/base_size > 32) {
-            printf("bitmap cannot store too much bsae page!\n");
-        }
-    };
-    ~ClientBlockManager() {};
-    
-    bool init(uint64_t addr, uint64_t size, uint32_t rkey) override {};
-
-    // bool init(uint64_t header_addr, uint64_t rkey_addr, uint64_t base_addr, uint64_t size, uint32_t rkey) {return true;};
-
-    inline bool set_block_rkey(uint64_t index, uint32_t rkey) {block_rkey_list[index] = rkey; return true;};
-
-    bool set_block_base_rkey(uint64_t index, uint64_t offset, uint32_t rkey) {
-        uint64_t start_addr = get_block_addr(index);
-        // assert(get_base_num() == size);
-        // for(int i = 0; i< size;i++)
-        *(uint32_t*)(start_addr + offset*base_size) = rkey;
-        return true;
-    };
-
-    inline uint64_t get_base_num() {return fast_size_/base_size;};
-
-    inline uint64_t get_block_num() {return block_num;};
-
-    inline uint64_t get_block_addr(uint64_t index) {return mm_header_addr + index * fast_size_;};
-
-    // inline block_header get_block_header(uint64_t index) {return header_list[index];};
-
-    inline block_header* get_metadata() {return header_list;};
-
-    inline uint32_t get_block_rkey(uint64_t index) {return block_rkey_list[index];};
-
-    inline uint64_t get_block_index(uint64_t addr) {return (addr-mm_heap_addr)/fast_size_;}
-
-    bool fetch(uint64_t size, uint64_t &addr, uint32_t &rkey) override {return true;};
-
-    bool fetch(uint64_t start_addr, uint64_t size, uint64_t &addr, uint32_t &rkey) override {return true;};
-
-    bool return_back(uint64_t addr, uint64_t size, uint32_t rkey) override {return true;};
-
-    bool fetch_fast(uint64_t &addr, uint32_t &rkey) override {return true;};
-
-    void print_state() override {};
-    
-private:
-
-    std::mutex m_mutex_;
-
-    uint64_t base_size;
-
-    uint32_t global_rkey;
-
-    uint64_t mm_header_addr;
-
-    uint64_t mm_rkey_addr;
-
-    uint64_t mm_heap_addr;
-
-    block_header* header_list;
-
-    uint32_t* block_rkey_list;
-
-    uint64_t heap_size;
-
-    uint64_t block_num;
-
-    uint64_t last_alloc;
-    
-};
-
-class FreeQueueManager: public FreeBlockManager{
-public:
-    FreeQueueManager(uint64_t fast_size):FreeBlockManager(fast_size) {};
-    ~FreeQueueManager() {
-        while(!free_fast_queue.empty()){
-            free_fast_queue.pop();
+    ClientBlockManager(uint64_t block_size):FreeBlockManager(block_size) {};
+    ~ClientBlockManager() {
+        while(!free_block_queue_.empty()){
+            free_block_queue_.pop();
         }
     };
     
@@ -311,14 +479,44 @@ public:
 
     bool fetch(uint64_t size, uint64_t &addr, uint32_t &rkey) override;
 
-    bool return_back(uint64_t addr, uint64_t size, uint32_t rkey) override;
+    bool fill_block(uint64_t addr, uint64_t size, uint32_t rkey) override;
 
-    bool fetch_fast(uint64_t &addr, uint32_t &rkey) override;
+    bool fetch_block(uint64_t &addr, uint32_t &rkey) override;
 
     void print_state() override;
     
 private:
-    std::queue<remote_addr> free_fast_queue;
+    std::queue<remote_addr> free_block_queue_;
+
+    std::mutex m_mutex_;
+
+    uint64_t size_;
+
+    uint64_t total_used_;
+
+};
+
+class FreeQueueManager: public FreeBlockManager{
+public:
+    FreeQueueManager(uint64_t block_size):FreeBlockManager(block_size) {};
+    ~FreeQueueManager() {
+        while(!free_block_queue.empty()){
+            free_block_queue.pop();
+        }
+    };
+    
+    bool init(uint64_t addr, uint64_t size, uint32_t rkey) override;
+
+    bool fetch(uint64_t size, uint64_t &addr, uint32_t &rkey) override;
+
+    bool fill_block(uint64_t addr, uint64_t size, uint32_t rkey) override;
+
+    bool fetch_block(uint64_t &addr, uint32_t &rkey) override;
+
+    void print_state() override;
+    
+private:
+    std::queue<remote_addr> free_block_queue;
 
     const uint64_t queue_watermark = (uint64_t)1 << 30;
 

@@ -70,7 +70,7 @@ Client::Client(const struct GlobalConfig * conf) {
     gettimeofday(&connection_recover_et_, NULL);
 
     printf("%d nm init\n", my_server_id_);
-    nm_->get_alloc_connection()->malloc_hint(0x28000000, my_server_id_);
+    // nm_->get_alloc_connection()->malloc_hint(0x28000000, my_server_id_);
     // nm_->get_alloc_connection()->malloc_hint(0x28000000, 0);
     // create mm
     mm_ = new ClientMM(conf, nm_);

@@ -7,10 +7,13 @@ list(APPEND source_ddckv
     hashtable.cc
     client_mm.cc
     client.cc
-    client_cr.cc
-    rdma_conn.cc)
+    client_cr.cc)
 
 add_library(libddckv STATIC ${source_ddckv})
+
+link_directories(lib)
+add_library(mralloc STATIC IMPORTED)
+set_target_properties(mralloc PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/lib/libmralloc.a)
 
 target_compile_options(
     libddckv
@@ -22,5 +25,5 @@ target_compile_options(
     # "-D_DEBUG"
 )
 
-target_link_libraries(libddckv ${Boost_LIBRARIES} boost_context boost_fiber tbb rdmacm ibverbs rt)
+target_link_libraries(libddckv mralloc ${Boost_LIBRARIES} boost_context boost_fiber tbb rdmacm ibverbs rt )
 
