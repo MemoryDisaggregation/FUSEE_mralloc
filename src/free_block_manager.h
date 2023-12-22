@@ -2,7 +2,7 @@
  * @Author: Blahaj Wang && wxy1999@mail.ustc.edu.cn
  * @Date: 2023-08-11 16:42:26
  * @LastEditors: blahaj wxy1999@mail.ustc.edu.cn
- * @LastEditTime: 2023-11-22 22:12:11
+ * @LastEditTime: 2023-12-09 11:10:26
  * @FilePath: /rmalloc_newbase/include/free_block_manager.h
  * @Description: Buddy tree for memory management 
  * 
@@ -66,11 +66,12 @@ struct section_e {
 typedef std::atomic<section_e> section;
 
 // typedef std::atomic<uint16_t> fast_class;
-struct fast_class_e {
-    uint16_t offset[4];
+struct section_class_e {
+    bitmap32 class_map_;
+    bitmap32 alloc_map_;
 };
 
-typedef std::atomic<fast_class_e> fast_class;
+typedef std::atomic<section_class_e> section_class;
 
 struct region_e {
     bitmap32 base_map_;
@@ -137,6 +138,24 @@ inline int find_free_index_from_bitmap32_lead(uint32_t bitmap) {
     return 31-__builtin_clz(~bitmap);
 }
 
+inline void raise_bit(uint32_t &alloc_map, uint32_t & class_map, uint32_t index){
+    if((alloc_map >> index) % 2 == 0) {
+        alloc_map |= (uint32_t)1<<index;
+    } else {
+        alloc_map &= ~((uint32_t)1<<index);
+        class_map |= (uint32_t)1<<index;
+    }
+}
+
+inline void down_bit(uint32_t &alloc_map, uint32_t & class_map, uint32_t index){
+    if((alloc_map >> index) % 2 == 1) {
+        alloc_map &= ~((uint32_t)1<<index);
+    } else {
+        class_map &= ~((uint32_t)1<<index);
+        alloc_map |= (uint32_t)1<<index;
+    }
+}
+
 class FreeBlockManager{
 public:
 struct remote_addr {
@@ -176,34 +195,45 @@ public:
         if(cal_header_size() > page_size) {
             printf("too large memory region, out of range!\n");
         }
-        init_size = size + page_size;
+        init_size = size + align;
         init_addr = num_align_upper(addr, align);
-        addr = init_addr + page_size;
-        assert(init_addr % page_size == 0);
+        addr = init_addr + align;
+        assert(init_addr % align == 0);
     };
 
     uint64_t cal_header_size() {
         uint64_t section_header_size = max_region_num/region_per_section * sizeof(section);
-        uint64_t fast_region_size = block_class_num * sizeof(fast_class);
+        uint64_t section_class_size = block_class_num * sizeof(section_class);
         uint64_t region_header_size = max_region_num * sizeof(region);
         uint64_t block_rkey_size = max_region_num * block_per_region * sizeof(uint32_t);
-        return section_header_size + fast_region_size + region_header_size + block_rkey_size;
+        return section_header_size + section_class_size + region_header_size + block_rkey_size;
     };
 
     bool init(uint64_t meta_addr, uint64_t addr, uint64_t size, uint32_t rkey);
 
+    void print_section_info() {
+        uint64_t empty=0, exclusive=0, shared=0;
+        for(int i = 0; i< section_num_; i++) {
+            empty += free_bit_in_bitmap32(section_header_[i].load().alloc_map_ | section_header_[i].load().class_map_);
+            exclusive += free_bit_in_bitmap32(~section_header_[i].load().alloc_map_ | ~section_header_[i].load().class_map_);
+            shared += free_bit_in_bitmap32(~section_header_[i].load().alloc_map_ | section_header_[i].load().class_map_);
+        }
+        printf("summary: empty: %lu, exclusive: %lu, shared: %lu\n", empty, exclusive, shared);
+    }
+
+    inline bool check_section(section_e alloc_section, alloc_advise advise, uint32_t offset);
     uint64_t get_heap_start() {return heap_start_;};
-    bool update_section(region_e region, alloc_advise advise);
-    bool find_section(section_e &alloc_section, uint32_t &section_offset, alloc_advise advise) ;
+    bool update_section(region_e region, alloc_advise advise, alloc_advise compare);
+    bool find_section(uint16_t block_class, section_e &alloc_section, uint32_t &section_offset, alloc_advise advise) ;
 
     bool fetch_large_region(section_e &alloc_section, uint32_t section_offset, uint64_t region_num, uint64_t &addr) ;
     bool fetch_region(section_e &alloc_section, uint32_t section_offset, uint32_t block_class, bool shared, region_e &alloc_region) ;
-    bool try_add_fast_region(uint32_t section_offset, uint32_t block_class, region_e &alloc_region);
+    bool try_add_section_class(uint32_t section_offset, uint32_t block_class, region_e &alloc_region);
     bool set_region_exclusive(region_e &alloc_region);
     bool set_region_empty(region_e &alloc_region);
-    
+    int free_region_block(uint64_t addr, bool is_exclusive);
 
-    inline uint32_t get_fast_region_index(uint32_t section_offset, uint32_t block_class) {return section_offset/4*block_class_num + block_class;};
+    inline uint32_t get_section_class_index(uint32_t section_offset, uint32_t block_class) {return section_offset*block_class_num + block_class;};
     inline uint64_t get_section_region_addr(uint32_t section_offset, uint32_t region_offset) {return heap_start_ + section_offset*section_size_ + region_offset * region_size_ ;};
     inline uint64_t get_region_addr(region_e region) {return heap_start_ + region.offset_ * region_size_;};
     inline uint64_t get_region_block_addr(region_e region, uint32_t block_offset) {return heap_start_ + region.offset_ * region_size_ + block_offset * block_size_;} ;
@@ -289,10 +319,11 @@ private:
 
     // info before heap segment
     section* section_header_;
-    fast_class* fast_region_;
+    section_class* section_class_header_;
     region* region_header_;
     uint32_t* block_rkey_;
     uint32_t* class_block_rkey_;
+    uint64_t* block_header_;
 
     // info of heap segment
     uint64_t heap_start_;

@@ -1,8 +1,8 @@
 /*
  * @Author: Blahaj Wang && wxy1999@mail.ustc.edu.cn
  * @Date: 2023-07-24 10:13:26
- * @LastEditors: Blahaj Wang && wxy1999@mail.ustc.edu.cn
- * @LastEditTime: 2023-11-14 15:14:32
+ * @LastEditors: blahaj wxy1999@mail.ustc.edu.cn
+ * @LastEditTime: 2023-12-06 22:51:47
  * @FilePath: /rmalloc_newbase/include/msg.h
  * @Description: 
  * 
@@ -21,7 +21,7 @@ namespace mralloc {
 #define NOTIFY_IDLE 0x00
 #define MAX_MSG_SIZE 64
 #define MAX_SERVER_WORKER 1
-#define MAX_SERVER_CLIENT 60
+#define MAX_SERVER_CLIENT 512
 #define RESOLVE_TIMEOUT_MS 5000
 #define RDMA_TIMEOUT_US 10000000  // 10s
 #define MAX_REMOTE_SIZE (1UL << 25)
@@ -31,7 +31,7 @@ namespace mralloc {
   (std::chrono::duration_cast<std::chrono::microseconds>((END) - (START)) \
        .count())
 
-enum MsgType { MSG_REGISTER, MSG_UNREGISTER, MSG_FETCH, MSG_FETCH_FAST, MSG_MW_BIND, RPC_FUSEE_SUBTABLE, MSG_MW_REBIND, MSG_MW_CLASS_BIND };
+enum MsgType { MSG_REGISTER, MSG_UNREGISTER, MSG_FETCH, MSG_FETCH_FAST, MSG_MW_BIND, RPC_FUSEE_SUBTABLE, MSG_MW_REBIND, MSG_MW_CLASS_BIND, MSG_FREE_FAST, MSG_PRINT_INFO};
 
 enum ResStatus { RES_OK, RES_FAIL };
 
@@ -83,6 +83,12 @@ public:
     uint32_t rkey;
     uint32_t size;
 };
+
+class FreeFastRequest : public RequestsMsg{
+public:
+    uint64_t addr;
+};
+CHECK_RDMA_MSG_SIZE(FreeFastRequest);
 
 class ClassBindRequest : public RequestsMsg{
 public:

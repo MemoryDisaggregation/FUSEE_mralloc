@@ -442,7 +442,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         // TODO: using shared cpu cache to fill 
         struct timeval start, end;
         gettimeofday(&start, NULL);
-        if(0)
+        if(1)
             nm->get_alloc_connection()->remote_fetch_block(addr, rkey);
         // else if (1)
         //     nm->get_alloc_connection()->fetch_mem_one_sided(addr, rkey);

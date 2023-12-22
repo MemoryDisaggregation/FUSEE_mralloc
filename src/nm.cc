@@ -87,13 +87,13 @@ UDPNetworkManager::UDPNetworkManager(const struct GlobalConfig * conf) {
     char port[6];
     sprintf(port, "%u", udp_port_);
     
-    rdma_connection_->init("10.0.0.63", "1145", mralloc::CONN_FUSEE);
+    rdma_connection_->init(conf->memory_ips[0], port, mralloc::CONN_FUSEE);
     // printf("start rdma create\n");
     sleep(1);
     malloc_connection_ = new mralloc::RDMAConnection();
-    malloc_connection_->init("10.0.0.63", "1145", mralloc::CONN_RPC);
+    malloc_connection_->init(conf->memory_ips[0], port, mralloc::CONN_RPC);
     // malloc_connection_->malloc_hint(uint64_t start, uint64_t idx)
-    sleep(10);
+    sleep(1);
     // printf("finish rdma create\n");
 
     // rdma_connection_->init_async();
