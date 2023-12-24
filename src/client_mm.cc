@@ -331,6 +331,8 @@ void ClientMM::mm_alloc(size_t size, UDPNetworkManager * nm, std::string key, __
 
 void ClientMM::mm_alloc(size_t size, UDPNetworkManager * nm, __OUT ClientMMAllocCtx * ctx) {
     // struct timeval st, et;
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
     // gettimeofday(&st, NULL);
     int ret = 0;
     size_t aligned_size = get_aligned_size(size);
@@ -370,6 +372,10 @@ void ClientMM::mm_alloc(size_t size, UDPNetworkManager * nm, __OUT ClientMMAlloc
     }
 
     last_allocated_info_ = alloc_subblock;
+    gettimeofday(&end, NULL);
+    uint64_t time =  end.tv_usec + end.tv_sec*1000*1000 - start.tv_usec - start.tv_sec*1000*1000;
+    avg_time_ = (avg_time_*count_ + time)/(count_ + 1);
+    count_ += 1;
 }
 
 void ClientMM::mm_alloc_log_info(RecoverLogInfo * log_info, __OUT ClientMMAllocCtx * ctx) {
@@ -440,9 +446,9 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
         // TODO: using shared cpu cache to fill 
-        struct timeval start, end;
-        gettimeofday(&start, NULL);
-        if(1)
+        // struct timeval start, end;
+        // gettimeofday(&start, NULL);
+        if(0)
             nm->get_alloc_connection()->remote_fetch_block(addr, rkey);
         // else if (1)
         //     nm->get_alloc_connection()->fetch_mem_one_sided(addr, rkey);
@@ -450,10 +456,10 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
             bool result;
             result = cpu_cache_->fetch_cache(addr, rkey); 
         }
-        gettimeofday(&end, NULL);
-        uint64_t time =  end.tv_usec + end.tv_sec*1000*1000 - start.tv_usec - start.tv_sec*1000*1000;
-        avg_time_ = (avg_time_*count_ + time)/(count_ + 1);
-        count_ += 1;
+        // gettimeofday(&end, NULL);
+        // uint64_t time =  end.tv_usec + end.tv_sec*1000*1000 - start.tv_usec - start.tv_sec*1000*1000;
+        // avg_time_ = (avg_time_*count_ + time)/(count_ + 1);
+        // count_ += 1;
         // printf("avgtime: %lu\n", avg_time_);
     } else {
         // assert(alloc_type == TYPE_SUBTABLE);
