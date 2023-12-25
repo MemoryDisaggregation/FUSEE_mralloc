@@ -464,7 +464,10 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
     int ret = 0;
     ret = client.load_kv_requests(workload_fnames->trans_fname, 0, 100000);
     assert(ret == 0);
-
+    printf("load finished\n");
+    if(args->thread_id == 0){
+      getchar();
+    }
     // client.start_gc_fiber();
     printf("Test phase start\n");
     boost::fibers::barrier global_barrier(client.num_coroutines_ + 1);
