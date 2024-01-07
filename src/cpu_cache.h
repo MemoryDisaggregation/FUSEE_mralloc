@@ -19,7 +19,7 @@ namespace mralloc {
 
 const uint32_t nprocs = 144;
 const uint32_t max_alloc_item = 256;
-const uint32_t max_free_item = 256;
+const uint32_t max_free_item = 1024;
 const uint32_t max_class_free_item = 512;
 
 template <typename T>
@@ -38,8 +38,8 @@ public:
     }
 
     uint32_t get_length() {
-        uint32_t reader = *reader_;
-        uint32_t writer = *writer_;
+        volatile uint32_t reader = *reader_;
+        volatile uint32_t writer = *writer_;
         if (reader == writer) {
             return 0;
         }
@@ -52,7 +52,10 @@ public:
 
     void add_cache(T value){
         // host side fill cache, add write pointer
-        uint32_t writer = *writer_;
+        volatile uint32_t writer = *writer_;
+	while(get_length() >= max_length_ - 1){
+		printf("busy wait\n");
+	}
         if(get_length() < max_length_-1){
             buffer_[writer] = value;        
             *writer_ = (writer + 1) % max_length_;
@@ -60,7 +63,7 @@ public:
     }
 
     void add_batch(T* value, uint64_t num) {
-        uint32_t writer = *writer_;
+        volatile uint32_t writer = *writer_;
         if(get_length() < max_length_-num){
             for(int i = 0; i < num; i++){
                 buffer_[(writer + i) % max_length_] = value[i];        
@@ -70,7 +73,7 @@ public:
     }
 
     bool force_fetch_cache(T &value) {
-        uint32_t reader = *reader_;
+        volatile uint32_t reader = *reader_;
         while(get_length() == 0 ) ;
         *reader_ = (reader + 1) % max_length_;
         while(!(buffer_[reader] != zero_)){
@@ -82,7 +85,7 @@ public:
     }
 
     bool try_fetch_cache(T &value) {
-        uint32_t reader = *reader_;
+        volatile uint32_t reader = *reader_;
         if(get_length() == 0) {
             return false;
         } 
@@ -96,8 +99,8 @@ public:
     }
 
     bool try_fetch_batch(T* value, uint64_t num) {
-        uint64_t length = get_length();
-        uint32_t reader = *reader_;
+        volatile uint64_t length = get_length();
+        volatile uint32_t reader = *reader_;
         if(length < num) {
             return false;
         } 
@@ -111,8 +114,8 @@ public:
     }
 
     int try_fetch_batch_all(T *value) {
-        uint64_t length = get_length();
-        uint32_t reader = *reader_;
+        volatile uint64_t length = get_length();
+        volatile uint32_t reader = *reader_;
         if(length == 0) {
             return 0;
         } 
@@ -127,10 +130,10 @@ public:
 
 private:
     uint32_t max_length_;
-    T* buffer_;
+    T* volatile buffer_;
     T zero_;
-    uint32_t* reader_;
-    uint32_t* writer_;
+    volatile uint32_t* reader_;
+    volatile uint32_t* writer_;
 };
 
 template <typename T>
@@ -245,7 +248,7 @@ public:
 
 private:
     uint32_t max_length_;
-    T* buffer_;
+    T* volatile buffer_;
     T zero_;
     std::atomic<uint32_t>* reader_;
     std::atomic<uint32_t>* writer_;
@@ -334,7 +337,9 @@ public:
             fd = shm_open("/cpu_cache", O_CREAT | O_EXCL | O_RDWR, 0600);
             // TODO: our cpu number should be dynamic, max_item can be static
             // e.g. const uint8_t nprocs = get_nprocs();
-            ftruncate(fd, sizeof(cpu_cache_storage));
+            if(ftruncate(fd, sizeof(cpu_cache_storage))){
+                perror("create shared memory failed");
+            }
             cpu_cache_content_ = (cpu_cache_storage*)mmap(NULL, sizeof(cpu_cache_storage), port_flag, mm_flag, fd, 0);
             for(int i = 0; i < nprocs; i++) {
                 alloc_ring[i] = new ring_buffer<mr_rdma_addr>(max_alloc_item, cpu_cache_content_->items[i], mr_rdma_addr(-1,-1), 

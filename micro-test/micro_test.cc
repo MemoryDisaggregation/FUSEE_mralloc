@@ -185,10 +185,10 @@ void * run_client(void * _args) {
 
     Client client(&config);
 
-    pthread_t polling_tid = client.start_polling_thread();
+   pthread_t polling_tid = client.start_polling_thread();
 
     args->op_type = "INSERT";
-    client.workload_run_time_ = 10000;
+    client.workload_run_time_ = 500;
     if (args->thread_id == 0) {
         printf("press to sync start %s\n", args->op_type);
         getchar();
@@ -201,10 +201,10 @@ void * run_client(void * _args) {
     assert(ret == 0);
     printf("%d %s finished\n", args->thread_id, args->op_type);
     pthread_barrier_wait(args->insert_finish_barrier);
-    client.free_batch();
+    //client.free_batch();
 
     args->op_type = "READ";
-    client.workload_run_time_ = 10000;
+    client.workload_run_time_ = 5000;
     if (args->thread_id == 0) {
         pthread_barrier_init(args->timer_barrier, NULL, args->num_threads);
         *args->should_stop = false;
@@ -218,10 +218,10 @@ void * run_client(void * _args) {
     assert(ret == 0);
     printf("%d %s finished\n", args->thread_id, args->op_type);
     pthread_barrier_wait(args->search_finish_barrier);
-    client.free_batch();
+    //client.free_batch();
 
     args->op_type = "UPDATE";
-    client.workload_run_time_ = 10000;
+    client.workload_run_time_ = 5000;
     if (args->thread_id == 0) {
         pthread_barrier_init(args->timer_barrier, NULL, args->num_threads);
         *args->should_stop = false;
@@ -235,10 +235,10 @@ void * run_client(void * _args) {
     assert(ret == 0);
     printf("%d %s finished\n", args->thread_id, args->op_type);
     pthread_barrier_wait(args->update_finish_barrier);
-    client.free_batch();
+    //client.free_batch();
 
     args->op_type = "DELETE";
-    client.workload_run_time_ = 10000;
+    client.workload_run_time_ = 500;
     if (args->thread_id == 0) {
         pthread_barrier_init(args->timer_barrier, NULL, args->num_threads);
         *args->should_stop = false;
@@ -252,7 +252,7 @@ void * run_client(void * _args) {
     assert(ret == 0);
     printf("%d %s finished\n", args->thread_id, args->op_type);
     pthread_barrier_wait(args->delete_finish_barrier);
-    client.free_batch();
+   // client.free_batch();
     
     client.stop_polling_thread();
     pthread_join(polling_tid, NULL);

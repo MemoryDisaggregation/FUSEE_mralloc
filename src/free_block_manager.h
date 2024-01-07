@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <queue>
 #include <mutex>
+#include <fstream>
 
 namespace mralloc {
 
@@ -80,7 +81,7 @@ struct region_e {
     // if exclusive_ = 0, this whole 1GB region is exclusive to some client
     // or it is used by an allocation of multiple GB memory
     uint16_t exclusive_ : 1;
-    uint16_t offset_ : 11;
+    uint16_t reserved_ : 11;
     bitmap16 class_map_;
 };
 
@@ -88,6 +89,7 @@ typedef std::atomic<region_e> region;
 
 struct region_with_rkey {
     region_e region;
+    uint32_t index;
     uint32_t rkey[block_per_region];
 };
 
@@ -182,8 +184,12 @@ public:
     ServerBlockManager(uint64_t block_size):block_size_(block_size) {
         region_size_ = block_size_ * block_per_region;
         section_size_ = region_size_ * region_per_section;
+        mem_record_.open("result.csv");
+
     };
-    ~ServerBlockManager() {};
+    ~ServerBlockManager() {
+        mem_record_.close();
+    };
     
     inline uint64_t num_align_upper(uint64_t num, uint64_t align) {
         return (num + align - 1) - ((num + align - 1) % align);
@@ -211,38 +217,59 @@ public:
 
     bool init(uint64_t meta_addr, uint64_t addr, uint64_t size, uint32_t rkey);
 
-    void print_section_info() {
-        uint64_t empty=0, exclusive=0, shared=0;
+    void print_section_info(int cache) {
+        uint64_t empty=0, exclusive=0;
+        uint64_t used = 0;
         for(int i = 0; i< section_num_; i++) {
-            empty += free_bit_in_bitmap32(section_header_[i].load().alloc_map_ | section_header_[i].load().class_map_);
-            exclusive += free_bit_in_bitmap32(~section_header_[i].load().alloc_map_ | ~section_header_[i].load().class_map_);
-            shared += free_bit_in_bitmap32(~section_header_[i].load().alloc_map_ | section_header_[i].load().class_map_);
+            uint32_t empty_map = section_header_[i].load().alloc_map_ | section_header_[i].load().class_map_;
+            uint32_t exclusive_map = ~section_header_[i].load().alloc_map_ | ~section_header_[i].load().class_map_;
+            for(int j = 0; j < region_per_section; j ++) {
+                if(empty_map%2 == 0) {
+                    empty += 1;
+                } else if(exclusive_map%2 == 0) {
+                    exclusive += 1;
+                } else {
+                    used += block_per_region - free_bit_in_bitmap32(region_header_[i*region_per_section + j].load().base_map_);
+                }
+                empty_map >>= 1;
+                exclusive_map >>= 1;
+            }
+            // empty += free_bit_in_bitmap32(section_header_[i].load().alloc_map_ | section_header_[i].load().class_map_);
+            // exclusive += free_bit_in_bitmap32(~section_header_[i].load().alloc_map_ | ~section_header_[i].load().class_map_);
         }
-        printf("summary: empty: %lu, exclusive: %lu, shared: %lu\n", empty, exclusive, shared);
+        used += exclusive * block_per_region;
+        for(int i = 0; i <block_num_; i++) {
+            if(block_header_[i] == 1) {
+                used ++;
+            }
+        }
+        // printf("%lu\n", (used-cache)*4);
+        mem_record_ << (used-cache)*4 << std::endl;
+        // printf("summary: empty: %lu, exclusive: %lu, shared: %lu\n", empty, exclusive, shared);
     }
 
     inline bool check_section(section_e alloc_section, alloc_advise advise, uint32_t offset);
     uint64_t get_heap_start() {return heap_start_;};
-    bool update_section(region_e region, alloc_advise advise, alloc_advise compare);
+    bool update_section(uint32_t region_index, alloc_advise advise, alloc_advise compare);
     bool find_section(uint16_t block_class, section_e &alloc_section, uint32_t &section_offset, alloc_advise advise) ;
 
     bool fetch_large_region(section_e &alloc_section, uint32_t section_offset, uint64_t region_num, uint64_t &addr) ;
-    bool fetch_region(section_e &alloc_section, uint32_t section_offset, uint32_t block_class, bool shared, region_e &alloc_region) ;
-    bool try_add_section_class(uint32_t section_offset, uint32_t block_class, region_e &alloc_region);
-    bool set_region_exclusive(region_e &alloc_region);
-    bool set_region_empty(region_e &alloc_region);
+    bool fetch_region(section_e &alloc_section, uint32_t section_offset, uint32_t block_class, bool shared, region_e &alloc_region, uint32_t &region_index) ;
+    bool try_add_section_class(uint32_t section_offset, uint32_t block_class, region_e &alloc_region, uint32_t region_index);
+    bool set_region_exclusive(region_e &alloc_region, uint32_t region_index);
+    bool set_region_empty(region_e &alloc_region, uint32_t region_index);
     int free_region_block(uint64_t addr, bool is_exclusive);
 
     inline uint32_t get_section_class_index(uint32_t section_offset, uint32_t block_class) {return section_offset*block_class_num + block_class;};
     inline uint64_t get_section_region_addr(uint32_t section_offset, uint32_t region_offset) {return heap_start_ + section_offset*section_size_ + region_offset * region_size_ ;};
-    inline uint64_t get_region_addr(region_e region) {return heap_start_ + region.offset_ * region_size_;};
-    inline uint64_t get_region_block_addr(region_e region, uint32_t block_offset) {return heap_start_ + region.offset_ * region_size_ + block_offset * block_size_;} ;
-    inline uint32_t get_region_block_rkey(region_e region, uint32_t block_offset) {return block_rkey_[region.offset_*block_per_region + block_offset];};
-    inline uint32_t get_region_class_block_rkey(region_e region, uint32_t block_offset) {return class_block_rkey_[region.offset_*block_per_region + block_offset];};
+    inline uint64_t get_region_addr(uint32_t region_index) {return heap_start_ + region_index * region_size_;};
+    inline uint64_t get_region_block_addr(uint32_t region_index, uint32_t block_offset) {return heap_start_ + region_index * region_size_ + block_offset * block_size_;} ;
+    inline uint32_t get_region_block_rkey(uint32_t region_index, uint32_t block_offset) {return block_rkey_[region_index*block_per_region + block_offset];};
+    inline uint32_t get_region_class_block_rkey(uint32_t region_index, uint32_t block_offset) {return class_block_rkey_[region_index*block_per_region + block_offset];};
 
-    bool init_region_class(region_e &alloc_region, uint32_t block_class, bool is_exclusive);
-    bool fetch_region_block(region_e &alloc_region, uint64_t &addr, uint32_t &rkey, bool is_exclusive) ;
-    bool fetch_region_class_block(region_e &alloc_region, uint32_t block_class, uint64_t &addr, uint32_t &rkey, bool is_exclusive) ;
+    bool init_region_class(region_e &alloc_region, uint32_t block_class, bool is_exclusive, uint32_t region_index);
+    bool fetch_region_block(region_e &alloc_region, uint64_t &addr, uint32_t &rkey, bool is_exclusive, uint32_t region_index) ;
+    bool fetch_region_class_block(region_e &alloc_region, uint32_t block_class, uint64_t &addr, uint32_t &rkey, bool is_exclusive, uint32_t region_index) ;
 
     inline bool set_block_rkey(uint64_t index, uint32_t rkey) {block_rkey_[index] = rkey; return true;};
     inline bool set_class_block_rkey(uint64_t index, uint32_t rkey) {class_block_rkey_[index] = rkey; return true;};
@@ -328,7 +355,7 @@ private:
     // info of heap segment
     uint64_t heap_start_;
     uint64_t heap_size_;
-
+    std::ofstream mem_record_;
     // info helping accelerate
 struct cache_info{
     uint64_t current_section_;

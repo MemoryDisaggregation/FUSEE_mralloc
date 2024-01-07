@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 find_package(Boost REQUIRED)
 
 include_directories(src)
-set(CMAKE_BUILD_TYPE debug)
+set(CMAKE_BUILD_TYPE release)
 
 add_subdirectory(src)
 

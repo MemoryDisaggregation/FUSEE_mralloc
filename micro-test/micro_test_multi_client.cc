@@ -67,14 +67,14 @@ static void start_client_threads(char * op_type, int num_clients, GlobalConfig *
         tid_list[i] = tid;
     }
 
-    uint32_t total_insert_tpt = 0;
-    uint32_t total_insert_failed = 0;
-    uint32_t total_update_tpt = 0;
-    uint32_t total_update_failed = 0;
-    uint32_t total_search_tpt = 0;
-    uint32_t total_search_failed = 0;
-    uint32_t total_delete_tpt = 0;
-    uint32_t total_delete_failed = 0;
+    uint64_t total_insert_tpt = 0;
+    uint64_t total_insert_failed = 0;
+    uint64_t total_update_tpt = 0;
+    uint64_t total_update_failed = 0;
+    uint64_t total_search_tpt = 0;
+    uint64_t total_search_failed = 0;
+    uint64_t total_delete_tpt = 0;
+    uint64_t total_delete_failed = 0;
     for (int i = 0; i < num_clients; i ++) {
         pthread_join(tid_list[i], NULL);
         total_insert_tpt += client_args_list[i].ret_num_insert_ops;
@@ -86,18 +86,18 @@ static void start_client_threads(char * op_type, int num_clients, GlobalConfig *
         total_search_failed += client_args_list[i].ret_fail_search_num;
         total_delete_failed += client_args_list[i].ret_fail_delete_num;
     }
-    printf("insert total: %d ops\n", total_insert_tpt);
-    printf("insert failed: %d ops\n", total_insert_failed);
-    printf("insert tpt: %d ops/s\n", (total_insert_tpt - total_insert_failed) * 1000 / 500);
-    printf("update total: %d ops\n", total_update_tpt);
-    printf("update failed: %d ops\n", total_update_failed);
-    printf("update tpt: %d ops/s\n", (total_update_tpt - total_update_failed) * 1000 / 5000);
-    printf("search total: %d ops\n", total_search_tpt);
-    printf("search failed: %d ops\n", total_search_failed);
-    printf("search tpt: %d ops/s\n", (total_search_tpt - total_search_failed) * 1000 / 5000);
-    printf("delete total: %d ops\n", total_delete_tpt);
-    printf("delete failed: %d ops\n", total_delete_failed);
-    printf("delete tpt: %d ops/s\n", (total_delete_tpt - total_delete_failed) * 1000 / 500);
+    printf("insert total: %ld ops\n", total_insert_tpt);
+    printf("insert failed: %ld ops\n", total_insert_failed);
+    printf("insert tpt: %ld ops/s\n", (total_insert_tpt - total_insert_failed) * 1000 / 500);
+    printf("update total: %ld ops\n", total_update_tpt);
+    printf("update failed: %ld ops\n", total_update_failed);
+    printf("update tpt: %ld ops/s\n", (total_update_tpt - total_update_failed) * 1000 / 5000);
+    printf("search total: %ld ops\n", total_search_tpt);
+    printf("search failed: %ld ops\n", total_search_failed);
+    printf("search tpt: %ld ops/s\n", (total_search_tpt - total_search_failed) * 1000 / 5000);
+    printf("delete total: %ld ops\n", total_delete_tpt);
+    printf("delete failed: %ld ops\n", total_delete_failed);
+    printf("delete tpt: %ld ops/s\n", (total_delete_tpt - total_delete_failed) * 1000 / 500);
     free(client_args_list);
 }
 
@@ -106,7 +106,7 @@ int main(int argc, char ** argv) {
         printf("Usage: %s path-to-config-file num-clients\n", argv[0]);
         return 1;
     }
-    ProfilerStart("ycsbc.prof");
+    // ProfilerStart("ycsbc.prof");
 
     int num_clients = atoi(argv[2]);
 
@@ -114,6 +114,6 @@ int main(int argc, char ** argv) {
     int ret = load_config(argv[1], &config);
     assert(ret == 0);
     start_client_threads("INSERT", num_clients, &config, argv[1]);
-    ProfilerStop();
+    // ProfilerStop();
 
 }

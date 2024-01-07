@@ -287,13 +287,13 @@ void ClientMM::mm_free(uint64_t orig_slot_val) {
     uint32_t subblock_8byte_offset = subblock_id / 64;
     
     uint64_t bmap_addr = block_raddr + subblock_8byte_offset * sizeof(uint64_t);
-    uint64_t add_value = (uint64_t)1 << (subblock_id % 64);
+    uint64_t add_value = 1 << (subblock_id % 64);
     if (bmap_addr > block_raddr + subblock_sz_ * bmap_block_num_) {
         printf("Error free!\n");
         exit(1);
     }
 
-    char tmp[256] = {'\0'};
+    char tmp[256] = {0};
     sprintf(tmp, "%lu@%d", bmap_addr, slot.server_id);
     std::string addr_str(tmp);
     // printf("%lu @ %u\n", add_value, subblock_id);
