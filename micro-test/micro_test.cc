@@ -202,7 +202,7 @@ void * run_client(void * _args) {
     printf("%d %s finished\n", args->thread_id, args->op_type);
     pthread_barrier_wait(args->insert_finish_barrier);
     //client.free_batch();
-
+/*
     args->op_type = "READ";
     client.workload_run_time_ = 5000;
     if (args->thread_id == 0) {
@@ -236,7 +236,7 @@ void * run_client(void * _args) {
     printf("%d %s finished\n", args->thread_id, args->op_type);
     pthread_barrier_wait(args->update_finish_barrier);
     //client.free_batch();
-
+*/
     args->op_type = "DELETE";
     client.workload_run_time_ = 500;
     if (args->thread_id == 0) {
