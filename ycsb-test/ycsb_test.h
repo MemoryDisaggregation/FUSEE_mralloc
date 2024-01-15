@@ -27,6 +27,7 @@ typedef struct TagRunClientArgs {
 
     uint32_t ret_num_ops;
     uint32_t ret_faile_num;
+    uint64_t ret_lat[1000];
 
     uint32_t client_id;
     uint32_t num_threads;

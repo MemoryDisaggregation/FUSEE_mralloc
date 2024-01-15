@@ -512,6 +512,9 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
         fb_list[i].join();
         ops_cnt += fb_args_list[i].ops_cnt;
         num_failed += fb_args_list[i].num_failed;
+        for(int j = 0; j < 1000; j++) {
+            args->ret_lat[j] += fb_args_list[i].lat[j];
+        }
         printf("fb%d finished\n", fb_args_list[i].coro_id);
     }
     // client.stop_gc_fiber();

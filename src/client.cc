@@ -4103,6 +4103,7 @@ void * client_ops_fb_cnt_ops(void * arg) {
     
     fiber_args->b->wait();
     boost::this_fiber::yield();
+    struct timeval st, et;
     uint32_t cnt = 0;
     std::unordered_map<std::string, bool> inserted_key_map;
     while (*fiber_args->should_stop == false && fiber_args->ops_num != 0) {
@@ -4131,10 +4132,12 @@ void * client_ops_fb_cnt_ops(void * arg) {
             inserted_key_map[ctx->key_str] = true;
             break;
         case KV_REQ_UPDATE:
+            gettimeofday(&st, NULL);
             ret = fiber_args->client->kv_update(ctx);
             if (ret == KV_OPS_FAIL_RETURN) {
                 num_failed ++;
             }
+            gettimeofday(&et, NULL);
             break;
         case KV_REQ_DELETE:
             fiber_args->client->kv_delete(ctx);
@@ -4146,6 +4149,13 @@ void * client_ops_fb_cnt_ops(void * arg) {
         if (ret == KV_OPS_FAIL_REDO) {
             cnt --;
         }
+        uint64_t result = (et.tv_sec - st.tv_sec) * 1000000 + (et.tv_usec - st.tv_usec);
+        if(result < 1000)
+            fiber_args->lat[result] += 1;
+        else if(result < 1)
+            fiber_args->lat[0] += 1;
+        else if(result > 1000)
+            fiber_args->lat[999] += 1;
         cnt ++;
     }
 

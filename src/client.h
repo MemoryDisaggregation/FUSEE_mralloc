@@ -592,6 +592,7 @@ typedef struct TagClientFiberArgs {
     boost::fibers::barrier * b;
     volatile bool   * should_stop;
     uint32_t ops_cnt;
+    uint64_t lat[1000];
     uint32_t thread_id;
 } ClientFiberArgs;
 

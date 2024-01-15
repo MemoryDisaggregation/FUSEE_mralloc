@@ -1,7 +1,7 @@
 {
     "role": "CLIENT",
     "conn_type": "ROCE",
-    "server_id":  4,
+    "server_id":  1,
     "udp_port": 1145,
     "memory_num": 1,
     "memory_ips": [
@@ -13,8 +13,8 @@
 
     "server_base_addr":  "0x10000000",
     "server_data_len":    193273528320,
-    "block_size":       8192,
-    "subblock_size":     512,
+    "block_size":       4194304,
+    "subblock_size":     1024,
     "client_local_size": 21474836480,
 
     "num_replication": 1,
@@ -24,8 +24,8 @@
     "micro_workload_num": 10000,
     "workload_run_time": 10,
     
-    "main_core_id": 2,
-    "poll_core_id": 3,
-    "bg_core_id": 4,
-    "gc_core_id": 5
+    "main_core_id": 3,
+    "poll_core_id": 4,
+    "bg_core_id": 5,
+    "gc_core_id": 6
 }
