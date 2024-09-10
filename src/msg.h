@@ -1,19 +1,11 @@
-/*
- * @Author: Blahaj Wang && wxy1999@mail.ustc.edu.cn
- * @Date: 2023-07-24 10:13:26
- * @LastEditors: blahaj wxy1999@mail.ustc.edu.cn
- * @LastEditTime: 2023-12-06 22:51:47
- * @FilePath: /rmalloc_newbase/include/msg.h
- * @Description: 
- * 
- * Copyright (c) 2023 by wxy1999@mail.ustc.edu.cn, All Rights Reserved. 
- */
+
 #pragma once
 
 #include <assert.h>
 #include <bits/stdint-uintn.h>
 #include <stdint.h>
 #include <chrono>
+#include <pthread.h>
 
 namespace mralloc {
 
@@ -37,13 +29,32 @@ enum ResStatus { RES_OK, RES_FAIL };
 
 enum ConnMethod {CONN_RPC, CONN_ONESIDE, CONN_FUSEE};
 
+enum MRType:uint64_t {MR_IDLE, MR_FREE, MR_TRANSFER};
+
 #define CHECK_RDMA_MSG_SIZE(T) \
     static_assert(sizeof(T) < MAX_MSG_SIZE, #T " msg size is too big!")
+
+// buffer size = 8 MiB
+struct MsgBuffer {
+    MRType msg_type[8];
+    void* buffer;
+};
+
+struct PublicInfo {
+    uint64_t pid_alive[1024];
+    uint16_t id_node_map[1024];
+    MsgBuffer node_buffer[128];
+};
+
+struct CNodeInit {
+    uint16_t node_id;
+    uint8_t access_type;
+};
 
 struct PData {
     uint64_t buf_addr;
     uint32_t buf_rkey;
-    uint32_t size;
+    uint64_t size;
     uint16_t id;
     uint64_t block_size_;
     uint64_t block_num_;
@@ -81,7 +92,7 @@ class FetchBlockResponse : public ResponseMsg {
 public:
     uint64_t addr;
     uint32_t rkey;
-    uint32_t size;
+    uint64_t size;
 };
 
 class FreeFastRequest : public RequestsMsg{
@@ -90,23 +101,9 @@ public:
 };
 CHECK_RDMA_MSG_SIZE(FreeFastRequest);
 
-class ClassBindRequest : public RequestsMsg{
-public:
-    uint32_t region_offset;
-    uint16_t block_class;
-};
-CHECK_RDMA_MSG_SIZE(ClassBindRequest);
-
-class ClassBindResponse : public ResponseMsg {
-public:
-    uint32_t rkey;
-};
-CHECK_RDMA_MSG_SIZE(ClassBindResponse);
-
 class RebindBlockRequest : public RequestsMsg{
 public:
     uint64_t addr;
-    uint16_t block_class;
 };
 CHECK_RDMA_MSG_SIZE(RebindBlockRequest);
 
@@ -146,7 +143,7 @@ public:
     uint64_t newkey;
     uint64_t addr;
     uint32_t rkey;
-    uint32_t size;
+    uint64_t size;
 };
 CHECK_RDMA_MSG_SIZE(MWbindRequest);
 
@@ -160,7 +157,7 @@ CHECK_RDMA_MSG_SIZE(MWbindRequest);
 
 class FetchRequest : public RequestsMsg {
 public:
-    uint32_t size;
+    uint64_t size;
 };
 CHECK_RDMA_MSG_SIZE(MWbindRequest);
 
@@ -186,5 +183,6 @@ CHECK_RDMA_MSG_SIZE(UnregisterRequest);
 
 struct UnregisterResponse : public ResponseMsg {};
 CHECK_RDMA_MSG_SIZE(UnregisterResponse);
+
 
 }  // namespace kv

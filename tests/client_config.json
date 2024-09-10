@@ -14,7 +14,7 @@
     "server_base_addr":  "0x10000000",
     "server_data_len":    193273528320,
     "block_size":       4194304,
-    "subblock_size":     1024,
+    "subblock_size":     4096,
     "client_local_size": 21474836480,
 
     "num_replication": 1,

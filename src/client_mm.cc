@@ -51,7 +51,9 @@ ClientMM::ClientMM(const struct GlobalConfig * conf, UDPNetworkManager * nm) {
 
     // construct block mapping
     get_block_map();
-    cpu_cache_ = new mralloc::cpu_cache();
+    if(use_ipc)
+        cpu_cache_ = new mralloc::cpu_cache();
+    else cpu_cache_ = NULL;
     // assert(cpu_cache_!=NULL);
 
     if (conf->is_recovery == false) {
@@ -448,14 +450,19 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         // TODO: using shared cpu cache to fill 
         struct timeval start, end;
         gettimeofday(&start, NULL);
-        if(0)
+        if(use_rpc)
             nm->get_alloc_connection()->remote_fetch_block(addr, rkey);
-        // else if (1)
-        //     nm->get_alloc_connection()->fetch_mem_one_sided(addr, rkey);
-        else{
+        else if (use_reg)
+            nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
+        else if (use_ipc){
             bool result;
-            result = cpu_cache_->fetch_cache(addr, rkey); 
+            mralloc::mr_rdma_addr remote_addr;
+            uint64_t index;
+            result = cpu_cache_->malloc(1024, remote_addr, index);
+            addr = remote_addr.addr;
+            rkey = remote_addr.rkey;
         }
+        rkey = nm->get_alloc_connection()->get_global_rkey();
         gettimeofday(&end, NULL);
         uint64_t time =  end.tv_usec + end.tv_sec*1000*1000 - start.tv_usec - start.tv_sec*1000*1000;
         avg_time_ = (avg_time_*count_ + time)/(count_ + 1);

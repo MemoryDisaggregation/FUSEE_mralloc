@@ -21,6 +21,18 @@
 #define MAX_NUM_SUBBLOCKS 4
 #define MAX_WATER_MARK 0.7
 
+const bool use_rpc = true;
+
+const bool use_cxl = false;
+
+const bool use_bitmap = false;
+
+const bool use_oneside = false;
+
+const bool use_ipc = false;
+
+const bool use_reg = false;
+
 typedef struct TagClientMMBlock {
     struct MrInfo mr_info_list[MAX_REP_NUM];
     uint8_t server_id_list[MAX_REP_NUM];
