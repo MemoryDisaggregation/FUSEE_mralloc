@@ -439,6 +439,87 @@ void ClientMM::free_recover_buf() {
     free(recover_buf_);
 }
 
+struct alloc_metadata {
+    uint16_t node=0;
+    double avg_retry=0;
+    int alloc_num = 0;
+    int max_retry = 0, max_cas = 0, max_section = 0, max_region = 0;
+    uint32_t cache_section_index;
+    uint32_t cache_region_index;
+    uint64_t cache_section;
+    uint64_t cache_region;
+    bool initied = false;
+};
+
+thread_local alloc_metadata dm_metadata = {};
+
+int one_sided_alloc(mralloc::RDMAConnection* conn, uint64_t &addr, uint32_t &rkey) {
+    int retry_time = 0, cas_time = 0, section_time = 0, region_time = 0, result;
+    uint64_t addr_result; uint32_t rkey_result;
+    bool slow_path = false;
+    if(dm_metadata.initied == false){
+        conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light);
+        conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, true, false, 
+            *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index);
+        dm_metadata.initied = true;
+    }
+    while((result = conn->fetch_region_block(*(mralloc::section_e*)(&dm_metadata.cache_section), 
+                *(mralloc::region_e*)(&dm_metadata.cache_region), addr_result, rkey_result, false, dm_metadata.cache_region_index)) < 0){
+        cas_time += (-1)*result;
+        if(!slow_path){
+            while((result = conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), 
+                    dm_metadata.cache_section_index, true, false, *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index)) < 0){
+                region_time += (-1)*result;
+                if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light)) < 0){
+                    slow_path = true;
+                    section_time += (-1)*result;
+                    break;
+			    }else section_time += result;
+            }
+            region_time += result;
+        } else {
+            while((result = conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 
+                    true, true, *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index)) < 0){
+                region_time += (-1)*result;
+                if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_heavy)) < 0){
+                    section_time += (-1)*result;
+                    // printf("waiting for new section avaliable\n");
+			    }
+                else section_time += result;
+            }  
+            region_time += result;
+        }
+    }
+    cas_time += result;
+    if(cas_time > 10 && !slow_path) {
+        if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light)) < 0){
+            slow_path = true;
+            section_time += (-1)*result;
+		}else section_time += result;
+        while((result = conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 
+                true, false, *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index)) < 0){
+            region_time += (-1)*result;
+            if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light)) < 0){
+                slow_path = true;
+                section_time += (-1)*result;
+                break;
+			}else section_time += result;
+        }
+    }
+    retry_time = cas_time + section_time + region_time;
+    if(retry_time > dm_metadata.max_retry){ 
+        dm_metadata.max_retry = retry_time;
+        dm_metadata.max_cas = cas_time;
+        dm_metadata.max_section = section_time;
+        dm_metadata.max_region = region_time;
+    }
+    dm_metadata.avg_retry = (dm_metadata.avg_retry*dm_metadata.alloc_num + retry_time)/(dm_metadata.alloc_num+1);
+	dm_metadata.alloc_num ++;
+    addr = addr_result; rkey = rkey_result;
+
+    return;
+}
+
 int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int alloc_type,
         __OUT struct MrInfo * mr_info) {
     struct KVMsg request, reply;
@@ -454,6 +535,9 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
             nm->get_alloc_connection()->remote_fetch_block(addr, rkey);
         else if (use_reg)
             nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
+        else if (use_oneside){
+
+        }
         else if (use_ipc){
             bool result;
             mralloc::mr_rdma_addr remote_addr;
