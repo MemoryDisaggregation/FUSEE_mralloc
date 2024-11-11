@@ -53,12 +53,14 @@ int main(int argc, char ** argv) {
     uint32_t total_tpt = 0;
     uint32_t total_failed = 0;
     uint64_t total_freed = 0;
+    double total_ratio = 0;
     uint64_t total_lat[1000] = {0};
     for (int i = 0; i < num_clients; i ++) {
         pthread_join(tid_list[i], NULL);
         total_tpt += client_args_list[i].ret_num_ops;
         total_failed += client_args_list[i].ret_faile_num;
         total_freed += client_args_list[i].free_size;
+        total_ratio += client_args_list[i].ratio;
         for(int j = 0; j < 1000; j ++) {
             total_lat[j] += client_args_list[i].ret_lat[j];
         }
@@ -66,6 +68,7 @@ int main(int argc, char ** argv) {
     printf("total: %d ops\n", total_tpt);
     printf("failed: %d ops\n", total_failed);
     printf("freed: %lu MiB\n", total_freed/1024/1024);
+    printf("free ratio: %lf\n", total_ratio/num_clients);
     printf("tpt: %d ops/s\n", (total_tpt - total_failed) / config.workload_run_time);
     FILE * lat_fp = fopen("result", "w");
     assert(lat_fp != NULL);

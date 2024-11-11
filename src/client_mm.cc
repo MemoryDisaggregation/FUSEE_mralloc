@@ -517,8 +517,10 @@ int one_sided_alloc(mralloc::RDMAConnection* conn, uint64_t &addr, uint32_t &rke
 	dm_metadata.alloc_num ++;
     addr = addr_result; rkey = rkey_result;
 
-    return;
+    return retry_time;
 }
+
+thread_local uint64_t hint = 0;
 
 int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int alloc_type,
         __OUT struct MrInfo * mr_info) {
@@ -536,7 +538,10 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         else if (use_reg)
             nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
         else if (use_oneside){
-
+            one_sided_alloc(nm->get_alloc_connection(),addr,rkey);
+        }
+        else if (use_cxl){
+            nm->get_alloc_connection()->fetch_block(hint, addr, rkey);
         }
         else if (use_ipc){
             bool result;

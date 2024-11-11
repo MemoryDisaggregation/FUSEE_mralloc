@@ -5027,11 +5027,12 @@ uint64_t Client::free_batch() {
     for (auto it = faa_map.begin(); it != faa_map.end(); it ++) {
         uint64_t target_addr;
         uint8_t  target_sid;
-        long read_addr; int read_sid;
-        sscanf(it->first.c_str(), "%ld@%d", &read_addr, &read_sid);
-        target_addr = read_addr; target_sid = read_sid;
+        // long read_addr; int read_sid;
+        // sscanf(it->first.c_str(), "%ld@%d", &read_addr, &read_sid);
+        sscanf(it->first.c_str(), "%ld@%d", &target_addr, &target_sid);
+        // target_addr = read_addr; target_sid = read_sid;
         // printf("addr:%ld\n", target_addr);
-        // printf("addr: %ld@%d, send:%lx\n", target_addr, target_sid, it->second);
+        printf("addr: %ld@%d, send:%lx\n", target_addr, target_sid, it->second);
         struct ibv_send_wr faa_wr;
         struct ibv_sge faa_sge;
         memset(&faa_wr, 0, sizeof(struct ibv_send_wr));
@@ -5064,22 +5065,29 @@ uint64_t Client::free_batch() {
         // if (stop_gc_ == true) 
         //     return;
     }
-    // printf("poll finished\n");
+    printf("poll finished\n");
     // sleep(20);
     // if (wait_wrid_wc_map[1]->status != IBV_WC_SUCCESS) {
     //     printf("wc error\n");
     // }
+    return 0;
+}
+
+uint64_t Client::reclaim(double &ratio) {
     uint64_t free_sum = 0;
+    uint64_t total_free = 0;
+    uint64_t total_block = 0;
     for (auto it = mm_->get_mm_blocks()->begin(); it != mm_->get_mm_blocks()->end(); it ++) {
         ClientMMBlock* block_ = *it;
         uint64_t addr_ = block_->mr_info_list[0].addr;
         uint32_t rkey_ = block_->mr_info_list[0].rkey;
         uint64_t size_ = mm_->get_bitmap_size();
         char* buffer_ = (char*)malloc(size_);
+        memset(buffer_, 0, size_);
         nm_->get_alloc_connection()->remote_read(buffer_, size_, addr_, rkey_);
         uint32_t offset_ = size_/mm_->subblock_sz_/64;
         uint32_t left_ = size_/mm_->subblock_sz_%64;
-        uint64_t* data_ = (uint64_t*)buffer_;
+        uint8_t* data_ = (uint8_t*)buffer_;
         // printf("target addr:%lu, value:%lx %lx\n", addr_, data_[0], data_[1]);
         // for(int i=0;i<size_/8;i++){
         //     if(data_[i] != 0)
@@ -5092,33 +5100,45 @@ uint64_t Client::free_batch() {
         // }
         uint64_t num_ = mm_->mm_block_sz_ / mm_->subblock_sz_ - size_/mm_->subblock_sz_ + left_;
         bool is_freed = true;
-        while (left_ != 0 ){
-            data_[offset_] |= (uint64_t)1 << (left_-1);
-            left_ -- ;
-        }
-        for(int i=offset_; i<size_/8; i++){
+        // while (left_ != 0 ){
+        //     printf("impossible!\n");
+        //     data_[offset_] |= (uint64_t)1 << (64-left_);
+        //     left_ -- ;
+        // }
+        total_block += mm_->subblock_num_;
+        int temple_block = mm_->subblock_num_;
+        int temple_free = 0;
+        for(int i=0; i<size_; i++){
             // printf("%lu\n", data_[i]);
-            int idx = 64;
-            while(idx && num_){
-                if(!((data_[i] & (uint64_t)1) == 1)){
-                    is_freed = false;
-                    break;
-                }
-                data_[i] >>= 1;
-                idx --; num_ --;
-            }
-            if(!is_freed || num_ == 0)
-                break;
+            int free_count = __builtin_popcount(data_[i]);
+            // if(free_count!=0)
+            //     printf("%d\n", free_count);
+            // if(free_count < 64) {
+            //     is_freed = false;
+            // }
+            total_free += free_count;
+            temple_free += free_count;
+            // int idx = 64;
+            // while(idx && num_){
+            //     if(!((data_[i] & (uint64_t)1) == 1)){
+            //         is_freed = false;
+            //         break;
+            //     }
+            //     data_[i] >>= 1;
+            //     idx --; num_ --;
+            // }
+            // if(!is_freed || num_ == 0)
+            //     break;
         }
-        if(is_freed){
+        if(temple_free == temple_block ){
             //TODO: free the block addr_
             free_sum += mm_->mm_block_sz_;
         }
         free(buffer_);
     }
-    // printf("%lu\n", free_sum);
+    ratio = 1.0*total_free/total_block;
+    printf("%lf\n", 1.0*total_free/total_block);
     return free_sum;
-
 }
 
 void * client_gc_fb(void * arg) {

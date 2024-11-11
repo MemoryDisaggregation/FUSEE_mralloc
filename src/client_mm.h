@@ -21,9 +21,9 @@
 #define MAX_NUM_SUBBLOCKS 4
 #define MAX_WATER_MARK 0.7
 
-const bool use_rpc = true;
+const bool use_rpc = false;
 
-const bool use_cxl = false;
+const bool use_cxl = true;
 
 const bool use_bitmap = false;
 
@@ -93,7 +93,6 @@ private:
     spinlock_t mm_blocks_lock_;
     uint32_t cur_mm_block_idx_;
 
-    uint32_t subblock_num_;
     uint32_t last_allocated_;
 
     uint32_t bmap_block_num_;
@@ -186,6 +185,7 @@ private:
 
 // public methods
 public:
+    uint32_t subblock_num_;
     uint64_t mm_block_sz_;
     uint64_t subblock_sz_;
     // block_mapping

@@ -527,7 +527,7 @@ public:
     void stop_polling_thread();
     void start_gc_fiber();
     void stop_gc_fiber();
-
+    uint64_t reclaim(double &ratio);
     uint64_t free_batch();
 
     void init_kvreq_space(uint32_t coro_id, uint32_t kv_req_st_idx, uint32_t num_ops);

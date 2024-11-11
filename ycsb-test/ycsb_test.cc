@@ -519,6 +519,11 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
     }
     // client.stop_gc_fiber();
     args->free_size = client.free_batch();
+
+    pthread_barrier_wait(args->timer_barrier);
+
+    args->free_size = client.reclaim(args->ratio);
+
     printf("thread: %d %d ops/s\n", args->thread_id, ops_cnt / client.workload_run_time_);
     printf("%d failed\n", num_failed);
     args->ret_num_ops = ops_cnt;
