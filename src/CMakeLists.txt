@@ -18,11 +18,11 @@ set_target_properties(mralloc PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}
 target_compile_options(
     libddckv
     PRIVATE
-    "-O2"
+    # "-O2"
     # ${CMAKE_CXX_FLAGS_DEBUG}
     "-gdwarf-4"
     "-g"
-    # "-D_DEBUG"
+    "-D_DEBUG"
 )
 
 target_link_libraries(libddckv mralloc ${Boost_LIBRARIES} boost_context boost_fiber tbb rdmacm ibverbs rt )

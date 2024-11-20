@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <sstream>
 
 // #include <boost/fiber/all.hpp>
 
@@ -5020,19 +5021,26 @@ void Client::get_recover_time(std::vector<struct timeval> & recover_time) {
     recover_time.push_back(kv_ops_recover_et_);
 }
 
+uint64_t free_in_act = 0;
+
 uint64_t Client::free_batch() {
     printf("start free\n");
-    std::unordered_map<std::string, uint64_t> faa_map(mm_->free_faa_map_);
-    mm_->free_faa_map_.clear();
-    for (auto it = faa_map.begin(); it != faa_map.end(); it ++) {
+    std::unordered_map<std::string, uint64_t> faa_map = mm_->free_faa_map_;
+    for (std::unordered_map<std::string, uint64_t>::iterator it = faa_map.begin(); it != faa_map.end(); it ++) {
         uint64_t target_addr;
         uint8_t  target_sid;
+        char at; int read_item;
         // long read_addr; int read_sid;
         // sscanf(it->first.c_str(), "%ld@%d", &read_addr, &read_sid);
-        sscanf(it->first.c_str(), "%ld@%d", &target_addr, &target_sid);
+        std::string* str = new std::string(it->first);
+        std::stringstream str_stream(it->first);
+        str_stream >> target_addr >> at >> read_item;
+        target_sid = read_item;
+        // sscanf(str->c_str(), "%ld@%d", &target_addr, &target_sid);
         // target_addr = read_addr; target_sid = read_sid;
         // printf("addr:%ld\n", target_addr);
-        printf("addr: %ld@%d, send:%lx\n", target_addr, target_sid, it->second);
+        printf("addr: %ld@%d, send:%llu\n", target_addr, target_sid, it->second);
+        free_in_act += __builtin_popcountll(it->second);
         struct ibv_send_wr faa_wr;
         struct ibv_sge faa_sge;
         memset(&faa_wr, 0, sizeof(struct ibv_send_wr));
@@ -5065,7 +5073,8 @@ uint64_t Client::free_batch() {
         // if (stop_gc_ == true) 
         //     return;
     }
-    printf("poll finished\n");
+    mm_->free_faa_map_.clear();
+    printf("poll finished: %lu\n", free_in_act);
     // sleep(20);
     // if (wait_wrid_wc_map[1]->status != IBV_WC_SUCCESS) {
     //     printf("wc error\n");
@@ -5075,11 +5084,13 @@ uint64_t Client::free_batch() {
 
 uint64_t Client::reclaim(double &ratio) {
     uint64_t free_sum = 0;
+    uint64_t free_sum_block = 0;
     uint64_t total_free = 0;
     uint64_t total_block = 0;
     for (auto it = mm_->get_mm_blocks()->begin(); it != mm_->get_mm_blocks()->end(); it ++) {
         ClientMMBlock* block_ = *it;
         uint64_t addr_ = block_->mr_info_list[0].addr;
+        addr_ = addr_ - (addr_%mm_->mm_block_sz_);
         uint32_t rkey_ = block_->mr_info_list[0].rkey;
         uint64_t size_ = mm_->get_bitmap_size();
         char* buffer_ = (char*)malloc(size_);
@@ -5105,11 +5116,12 @@ uint64_t Client::reclaim(double &ratio) {
         //     data_[offset_] |= (uint64_t)1 << (64-left_);
         //     left_ -- ;
         // }
-        total_block += mm_->subblock_num_;
-        int temple_block = mm_->subblock_num_;
+        total_block += mm_->subblock_num_ - size_/mm_->subblock_sz_;
+        int temple_block = mm_->subblock_num_ - size_/mm_->subblock_sz_;
         int temple_free = 0;
         for(int i=0; i<size_; i++){
-            // printf("%lu\n", data_[i]);
+            // if(data_[i]!=0)
+            //     printf("%lu\n", data_[i]);
             int free_count = __builtin_popcount(data_[i]);
             // if(free_count!=0)
             //     printf("%d\n", free_count);
@@ -5132,12 +5144,15 @@ uint64_t Client::reclaim(double &ratio) {
         }
         if(temple_free == temple_block ){
             //TODO: free the block addr_
+            printf("%d,%d, %d\n", temple_free, temple_block, size_);
             free_sum += mm_->mm_block_sz_;
+            free_sum_block += temple_free;
         }
+        // if(temple_free >0)
         free(buffer_);
     }
     ratio = 1.0*total_free/total_block;
-    printf("%lf\n", 1.0*total_free/total_block);
+    printf("%lf, %lf, act is %lf\n", 1.0*free_sum_block/total_block, 1.0*total_free/total_block, 1.0*free_in_act/total_block);
     return free_sum;
 }
 

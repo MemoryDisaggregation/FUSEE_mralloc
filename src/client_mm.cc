@@ -300,7 +300,7 @@ void ClientMM::mm_free(uint64_t orig_slot_val) {
     std::string addr_str(tmp);
     // printf("%lu @ %u\n", add_value, subblock_id);
     // if(free_faa_map_.find(addr_str) != free_faa_map_.end())
-    free_faa_map_[addr_str] += add_value;
+    free_faa_map_[addr_str] |= add_value;
     // else
         // free_faa_map_.insert(std::map<std::string, uint64_t>::value_type(addr_str, add_value));
 }
