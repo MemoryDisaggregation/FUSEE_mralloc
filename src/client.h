@@ -185,6 +185,7 @@ private:
     
     // gc
     boost::fibers::fiber gc_fb_;
+    pthread_t gc_thread_;
 
 // private inline methods
 private:

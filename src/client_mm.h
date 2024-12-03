@@ -222,6 +222,7 @@ public:
 
 // inline public methods
 public:
+    std::mutex free_lock;
     inline uint64_t get_remote_meta_ptr() {
         return client_meta_addr_;
     }

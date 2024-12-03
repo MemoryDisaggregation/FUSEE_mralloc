@@ -3821,13 +3821,16 @@ boost::fibers::fiber Client::start_polling_fiber() {
 }
 
 void Client::start_gc_fiber() {
-    boost::fibers::fiber fb(client_gc_fb, (void *)this);
-    gc_fb_ = std::move(fb);
+    // boost::fibers::fiber fb(client_gc_fb, (void *)this);
+    
+    pthread_create(&gc_thread_, NULL, client_gc_fb, (void *)this);
+    // gc_fb_ = std::move(fb);
 }
 
 void Client::stop_gc_fiber() {
     stop_gc_ = true;
-    gc_fb_.join();
+    pthread_join(gc_thread_, NULL);
+    // gc_fb_.join();
 }
 
 void Client::stop_polling_thread() {
@@ -5024,8 +5027,11 @@ void Client::get_recover_time(std::vector<struct timeval> & recover_time) {
 uint64_t free_in_act = 0;
 
 uint64_t Client::free_batch() {
-    printf("start free\n");
-    std::unordered_map<std::string, uint64_t> faa_map = mm_->free_faa_map_;
+    // printf("start free\n");
+    mm_->free_lock.lock();
+    std::unordered_map<std::string, uint64_t> faa_map(mm_->free_faa_map_);
+    mm_->free_faa_map_.clear();
+    mm_->free_lock.unlock();
     for (std::unordered_map<std::string, uint64_t>::iterator it = faa_map.begin(); it != faa_map.end(); it ++) {
         uint64_t target_addr;
         uint8_t  target_sid;
@@ -5039,8 +5045,11 @@ uint64_t Client::free_batch() {
         // sscanf(str->c_str(), "%ld@%d", &target_addr, &target_sid);
         // target_addr = read_addr; target_sid = read_sid;
         // printf("addr:%ld\n", target_addr);
-        printf("addr: %ld@%d, send:%llu\n", target_addr, target_sid, it->second);
+        // printf("addr: %lx@%d, send:%lx\n", target_addr, target_sid, it->second);
         free_in_act += __builtin_popcountll(it->second);
+        // if(__builtin_popcountll(it->second) > 7 || it->second > 254){
+        //     printf("free error!, %lx\n", it->second);
+        // }
         struct ibv_send_wr faa_wr;
         struct ibv_sge faa_sge;
         memset(&faa_wr, 0, sizeof(struct ibv_send_wr));
@@ -5073,8 +5082,7 @@ uint64_t Client::free_batch() {
         // if (stop_gc_ == true) 
         //     return;
     }
-    mm_->free_faa_map_.clear();
-    printf("poll finished: %lu\n", free_in_act);
+    // printf("poll finished: %lu\n", free_in_act);
     // sleep(20);
     // if (wait_wrid_wc_map[1]->status != IBV_WC_SUCCESS) {
     //     printf("wc error\n");
@@ -5087,8 +5095,12 @@ uint64_t Client::reclaim(double &ratio) {
     uint64_t free_sum_block = 0;
     uint64_t total_free = 0;
     uint64_t total_block = 0;
-    for (auto it = mm_->get_mm_blocks()->begin(); it != mm_->get_mm_blocks()->end(); it ++) {
+    for (auto it = mm_->get_mm_blocks()->begin(); it != mm_->get_mm_blocks()->end();) {
+    // uint64_t length = mm_->get_mm_blocks()->size();
+    // int offset = 0;
+    // for (int j = 0; j < length; j++) {
         ClientMMBlock* block_ = *it;
+        // ClientMMBlock* block_ = mm_->get_mm_blocks()->at(j+offset);
         uint64_t addr_ = block_->mr_info_list[0].addr;
         addr_ = addr_ - (addr_%mm_->mm_block_sz_);
         uint32_t rkey_ = block_->mr_info_list[0].rkey;
@@ -5098,8 +5110,8 @@ uint64_t Client::reclaim(double &ratio) {
         nm_->get_alloc_connection()->remote_read(buffer_, size_, addr_, rkey_);
         uint32_t offset_ = size_/mm_->subblock_sz_/64;
         uint32_t left_ = size_/mm_->subblock_sz_%64;
-        uint8_t* data_ = (uint8_t*)buffer_;
-        // printf("target addr:%lu, value:%lx %lx\n", addr_, data_[0], data_[1]);
+        uint64_t* data_ = (uint64_t*)buffer_;
+        // printf("target addr:%lx, value:%lx\n", addr_, data_[0]);
         // for(int i=0;i<size_/8;i++){
         //     if(data_[i] != 0)
         //         printf("%lu ", data_[i]);
@@ -5119,10 +5131,13 @@ uint64_t Client::reclaim(double &ratio) {
         total_block += mm_->subblock_num_ - size_/mm_->subblock_sz_;
         int temple_block = mm_->subblock_num_ - size_/mm_->subblock_sz_;
         int temple_free = 0;
-        for(int i=0; i<size_; i++){
+        for(int i=0; i<size_/8; i++){
             // if(data_[i]!=0)
             //     printf("%lu\n", data_[i]);
-            int free_count = __builtin_popcount(data_[i]);
+            int free_count = __builtin_popcountll(data_[i]);
+            // if(free_count > 7){
+            //     printf("free2 error!, %lx\n", data_[i]);
+            // }
             // if(free_count!=0)
             //     printf("%d\n", free_count);
             // if(free_count < 64) {
@@ -5142,33 +5157,72 @@ uint64_t Client::reclaim(double &ratio) {
             // if(!is_freed || num_ == 0)
             //     break;
         }
+        if(temple_free > temple_block){
+            printf("error!%d:%d\n", temple_free, temple_block);
+        }
         if(temple_free == temple_block ){
             //TODO: free the block addr_
-            printf("%d,%d, %d\n", temple_free, temple_block, size_);
+            // printf("%d,%d, %d\n", temple_free, temple_block, size_);
             free_sum += mm_->mm_block_sz_;
             free_sum_block += temple_free;
+            if(use_rpc)
+                nm_->get_alloc_connection()->remote_free_block(addr_);
+            else if (use_reg)
+                printf("dereg unfinished\n");
+            else if (use_oneside){
+                // printf("free addr: %lx\n", addr_);
+                nm_->get_alloc_connection()->full_free(addr_, 0);
+            }
+            else if (use_cxl){
+                nm_->get_alloc_connection()->free_block(addr_);
+            }
+            else if (use_ipc){
+                bool result;
+                mralloc::mr_rdma_addr remote_addr;
+                uint64_t index;
+                printf("ipc unfinished\n");
+            }
+            // free(*it);
+            // free(mm_->get_mm_blocks()->at(j+offset));
+            memset(buffer_, 0, size_);
+            nm_->get_alloc_connection()->remote_write(buffer_, size_, addr_, rkey_);
+            // auto record = *it;
+            it=mm_->get_mm_blocks()->erase(it);
+            // free(record);
+            // mm_->get_mm_blocks()->erase(mm_->get_mm_blocks()->begin()+j+offset);
+            // offset -= 1;
+            // j -= 1;
+            // length -= 1;
+        }
+        else{
+            it++;
         }
         // if(temple_free >0)
         free(buffer_);
     }
     ratio = 1.0*total_free/total_block;
-    printf("%lf, %lf, act is %lf\n", 1.0*free_sum_block/total_block, 1.0*total_free/total_block, 1.0*free_in_act/total_block);
+    printf("free %lf, total %lf, act is %lf\n", 1.0*free_sum_block/total_block, 1.0*total_free/total_block, 1.0*free_in_act/total_block);
     return free_sum;
 }
 
 void * client_gc_fb(void * arg) {
     Client * client = (Client *)arg;
+    double ratio;
+    struct timeval st, et;
+    gettimeofday(&st, NULL);    
     while (true) {
-        // GC every 15 seconds
+        // GC every 5 seconds
         int num_sleep = 0;
-        while (num_sleep < 15) {
-            boost::this_fiber::sleep_for(std::chrono::seconds(1));
+        while (num_sleep < 10) {
+            // boost::this_fiber::sleep_for(std::chrono::seconds(1));
+            gettimeofday(&et, NULL);
             if (client->stop_gc_ == true) 
                 return NULL;
-            num_sleep ++;
+            num_sleep = et.tv_sec - st.tv_sec;
         }
-
+        gettimeofday(&st, NULL);    
         client->free_batch();
+        client->reclaim(ratio);
         // TODO: gc
         
     }

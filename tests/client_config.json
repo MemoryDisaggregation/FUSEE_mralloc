@@ -5,7 +5,7 @@
     "udp_port": 1145,
     "memory_num": 1,
     "memory_ips": [
-        "10.10.1.1"
+        "10.10.1.2"
     ],
     "ib_dev_id": 2,
     "ib_port_id": 1,
@@ -13,8 +13,8 @@
 
     "server_base_addr":  "0x10000000",
     "server_data_len":    193273528320,
-    "block_size":       16384,
-    "subblock_size":     4096,
+    "block_size":       262144,
+    "subblock_size":     512,
     "client_local_size": 21474836480,
 
     "num_replication": 1,
@@ -22,7 +22,7 @@
     "num_coroutines": 10,
     "miss_rate_threash": 0,
     "micro_workload_num": 10000,
-    "workload_run_time": 10,
+    "workload_run_time": 60,
     
     "main_core_id": 3,
     "poll_core_id": 4,

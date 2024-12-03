@@ -83,9 +83,12 @@ ClientMM::ClientMM(const struct GlobalConfig * conf, UDPNetworkManager * nm) {
 }
 
 ClientMM::~ClientMM() {
-    for (size_t i = 0; i < mm_blocks_.size(); i ++) {
-        free(mm_blocks_[i]);
-    }
+    // for(auto it = mm_blocks_.begin(); it != mm_blocks_.end(); it++){
+    //     free(*it);
+    // }
+    // for (size_t i = 0; i < mm_blocks_.size(); i ++) {
+    //     free(mm_blocks_[i]);
+    // }
     mm_blocks_.clear();
     printf("avg time %luus\n", avg_time_);
 }
@@ -289,7 +292,7 @@ void ClientMM::mm_free(uint64_t orig_slot_val) {
     uint32_t subblock_8byte_offset = subblock_id / 64;
     
     uint64_t bmap_addr = block_raddr + subblock_8byte_offset * sizeof(uint64_t);
-    uint64_t add_value = (uint64_t)1 << (subblock_id % 64);
+    uint64_t add_value = ((uint64_t)1) << (subblock_id % 64);
     if (bmap_addr > block_raddr + subblock_sz_ * bmap_block_num_) {
         printf("Error free!\n");
         exit(1);
@@ -299,10 +302,15 @@ void ClientMM::mm_free(uint64_t orig_slot_val) {
     sprintf(tmp, "%lu@%d", bmap_addr, slot.server_id);
     std::string addr_str(tmp);
     // printf("%lu @ %u\n", add_value, subblock_id);
-    // if(free_faa_map_.find(addr_str) != free_faa_map_.end())
+    free_lock.lock();
+
+    // auto result = free_faa_map_.find(addr_str);
+    // if(result != free_faa_map_.end())
+    // result->second |= add_value;
     free_faa_map_[addr_str] |= add_value;
     // else
         // free_faa_map_.insert(std::map<std::string, uint64_t>::value_type(addr_str, add_value));
+    free_lock.unlock();
 }
 
 void ClientMM::mm_free_cur(const ClientMMAllocCtx * ctx) {
@@ -453,71 +461,17 @@ struct alloc_metadata {
 
 thread_local alloc_metadata dm_metadata = {};
 
-int one_sided_alloc(mralloc::RDMAConnection* conn, uint64_t &addr, uint32_t &rkey) {
-    int retry_time = conn->full_alloc(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 0, addr, rkey);
-    // int retry_time = 0, cas_time = 0, section_time = 0, region_time = 0, result;
-    // uint64_t addr_result; uint32_t rkey_result;
-    // bool slow_path = false;
-    // if(dm_metadata.initied == false){
-    //     conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light);
-    //     conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, true, false, 
-    //         *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index);
-    //     dm_metadata.initied = true;
-    // }
-    // while((result = conn->fetch_region_block(*(mralloc::section_e*)(&dm_metadata.cache_section), 
-    //             *(mralloc::region_e*)(&dm_metadata.cache_region), addr_result, rkey_result, false, dm_metadata.cache_region_index)) < 0){
-    //     cas_time += (-1)*result;
-    //     if(!slow_path){
-    //         while((result = conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), 
-    //                 dm_metadata.cache_section_index, true, false, *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index)) < 0){
-    //             region_time += (-1)*result;
-    //             if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light)) < 0){
-    //                 slow_path = true;
-    //                 section_time += (-1)*result;
-    //                 break;
-	// 		    }else section_time += result;
-    //         }
-    //         region_time += result;
-    //     } else {
-    //         while((result = conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 
-    //                 true, true, *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index)) < 0){
-    //             region_time += (-1)*result;
-    //             if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_heavy)) < 0){
-    //                 section_time += (-1)*result;
-    //                 // printf("waiting for new section avaliable\n");
-	// 		    }
-    //             else section_time += result;
-    //         }  
-    //         region_time += result;
-    //     }
-    // }
-    // cas_time += result;
-    // if(cas_time > 10 && !slow_path) {
-    //     if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light)) < 0){
-    //         slow_path = true;
-    //         section_time += (-1)*result;
-	// 	}else section_time += result;
-    //     while((result = conn->fetch_region(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 
-    //             true, false, *(mralloc::region_e*)(&dm_metadata.cache_region), dm_metadata.cache_region_index)) < 0){
-    //         region_time += (-1)*result;
-    //         if((result = conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, mralloc::alloc_light)) < 0){
-    //             slow_path = true;
-    //             section_time += (-1)*result;
-    //             break;
-	// 		}else section_time += result;
-    //     }
-    // }
-    // retry_time = cas_time + section_time + region_time;
-    // if(retry_time > dm_metadata.max_retry){ 
-    //     dm_metadata.max_retry = retry_time;
-    //     dm_metadata.max_cas = cas_time;
-    //     dm_metadata.max_section = section_time;
-    //     dm_metadata.max_region = region_time;
-    // }
-    // dm_metadata.avg_retry = (dm_metadata.avg_retry*dm_metadata.alloc_num + retry_time)/(dm_metadata.alloc_num+1);
-	// dm_metadata.alloc_num ++;
-    // addr = addr_result; rkey = rkey_result;
+int one_sided_free(mralloc::RDMAConnection* conn, uint64_t addr) {
+    int retry_time = conn->full_free(addr, 0);
+    return retry_time;
+}
 
+int one_sided_alloc(mralloc::RDMAConnection* conn, uint64_t &addr, uint32_t &rkey) {
+    if(dm_metadata.initied == false){
+        conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 0, mralloc::alloc_light);
+        dm_metadata.initied = true;
+    }
+    int retry_time = conn->full_alloc(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 0, addr, rkey);
     return retry_time;
 }
 
@@ -539,7 +493,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         else if (use_reg)
             nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
         else if (use_oneside){
-            one_sided_alloc(nm->get_alloc_connection(),addr,rkey);
+            one_sided_alloc(nm->get_alloc_connection(),addr, rkey);
         }
         else if (use_cxl){
             nm->get_alloc_connection()->fetch_block(hint, addr, rkey);
