@@ -19,7 +19,7 @@ namespace mralloc {
 const uint64_t large_block_items = 64;
 
 const uint64_t max_region_num = 2048;
-const uint64_t region_per_section = 32;
+const uint64_t region_per_section = 16;
 const uint64_t block_per_region = 32;
 const uint64_t page_size = 1024*1024*64;
 
@@ -58,9 +58,21 @@ struct large_block {
     uint64_t offset;
 };
 
+/* section the same as region
+*/
 struct section_e {
-    bitmap32 frag_map_;
-    bitmap32 alloc_map_;
+    bitmap16 frag_map_;
+    bitmap16 alloc_map_;
+    // max_length, 1~32 
+    uint16_t retry_ : 2;
+    // [TODO] no used?
+    uint16_t exclusive_ : 1;
+    // on use to check whether it has been freed
+    uint16_t on_use_ : 1;
+    uint16_t last_offset_ : 5;
+    uint16_t last_timestamp_ : 7;
+    uint16_t num : 3;
+    uint16_t last_modify_id_ : 13;
 };
 typedef std::atomic<section_e> section;
 
@@ -74,21 +86,23 @@ struct region_e {
     bitmap32 base_map_;
     // max_length, 1~32 
     uint16_t retry_ : 2;
-    // if exclusive_ = 0, this whole 1GB region is exclusive to some client
-    // or it is used by an allocation of multiple GB memory
+    // [TODO] no used?
     uint16_t exclusive_ : 1;
     // on use to check whether it has been freed
     uint16_t on_use_ : 1;
     uint16_t last_offset_ : 5;
     uint16_t last_timestamp_ : 7;
-    uint16_t last_modify_id_;
+    uint16_t num : 3;
+    uint16_t last_modify_id_ : 13;
 };
 
 typedef std::atomic<region_e> region;
 
 struct block_e {
     uint64_t client_id_ : 16;
-    uint64_t timestamp_ : 48;
+    uint64_t timestamp_ : 16;
+    uint64_t size_ : 32;
+
 };
 
 typedef std::atomic<block_e> block;
@@ -140,21 +154,21 @@ inline int find_free_index_from_bitmap32_lead(uint32_t bitmap) {
     return 31-__builtin_clz(~bitmap);
 }
 
-inline void raise_bit(uint32_t &alloc_map, uint32_t & frag_map, uint32_t index){
+inline void raise_bit(uint16_t &alloc_map, uint16_t & frag_map, uint16_t index){
     if((alloc_map >> index) % 2 == 0) {
-        alloc_map |= (uint32_t)1<<index;
+        alloc_map |= (uint16_t)1<<index;
     } else {
-        alloc_map &= ~((uint32_t)1<<index);
-        frag_map |= (uint32_t)1<<index;
+        alloc_map &= ~((uint16_t)1<<index);
+        frag_map |= (uint16_t)1<<index;
     }
 }
 
-inline void down_bit(uint32_t &alloc_map, uint32_t & frag_map, uint32_t index){
+inline void down_bit(uint16_t &alloc_map, uint16_t & frag_map, uint16_t index){
     if((alloc_map >> index) % 2 == 1) {
-        alloc_map &= ~((uint32_t)1<<index);
+        alloc_map &= ~((uint16_t)1<<index);
     } else {
-        frag_map &= ~((uint32_t)1<<index);
-        alloc_map |= (uint32_t)1<<index;
+        frag_map &= ~((uint16_t)1<<index);
+        alloc_map |= (uint16_t)1<<index;
     }
 }
 
@@ -241,22 +255,16 @@ public:
         double utilization = 0;
         uint64_t managed = 0;
         for(int i = 0; i< section_num_; i++) {
-            uint32_t empty_map = section_header_[i].load().alloc_map_ | section_header_[i].load().frag_map_;
-            uint32_t exclusive_map = ~section_header_[i].load().alloc_map_ | ~section_header_[i].load().frag_map_;
+            uint16_t empty_map = section_header_[i].load().alloc_map_ | section_header_[i].load().frag_map_;
+            uint16_t exclusive_map = ~section_header_[i].load().alloc_map_ | ~section_header_[i].load().frag_map_;
             uint32_t use_counter;
             for(int j = 0; j < region_per_section; j ++) {
-                // if(empty_map%2 == 0) {
-                //     empty += 1;
-                // } else if(exclusive_map%2 == 0) {
-                //     exclusive += 1;
-                // } else {
                 use_counter = block_per_region - free_bit_in_bitmap32(region_header_[i*region_per_section + j].load().base_map_);
                 used += use_counter;
                 if(use_counter > 0){
                     managed += 1;
                     utilization += 1.0*use_counter/block_per_region;
                 }
-                // }
                 empty_map >>= 1;
                 exclusive_map >>= 1;
             }
@@ -276,18 +284,17 @@ public:
     uint64_t get_heap_start() {return heap_start_;};
     bool force_update_section_state(section_e &section, uint32_t region_index, alloc_advise advise);
     bool force_update_section_state(section_e &section, uint32_t region_index, alloc_advise advise, alloc_advise compare);
-    bool force_update_region_state(region_e &alloc_region, uint32_t region_index, bool is_exclusive, bool on_use);
-    int find_section(section_e &alloc_section, uint32_t &section_offset, alloc_advise advise) ;
+    int find_section(section_e &alloc_section, uint32_t &section_offset, uint16_t size_class, alloc_advise advise) ;
 
-    int fetch_region(section_e &alloc_section, uint32_t section_offset, bool shared, bool use_chance, region_e &alloc_region, uint32_t &region_index) ;
-    int free_region_block(uint64_t addr, bool is_exclusive);
+    int fetch_region(section_e &alloc_section, uint32_t section_offset, uint16_t size_class, bool use_chance, region_e &alloc_region, uint32_t &region_index, uint32_t skip_mask) ;
+    int free_region_block(uint64_t addr, bool is_exclusive, uint16_t block_class);
 
     inline uint64_t get_section_region_addr(uint32_t section_offset, uint32_t region_offset) {return heap_start_ + section_offset*section_size_ + region_offset * region_size_ ;};
     inline uint64_t get_region_addr(uint32_t region_index) {return heap_start_ + region_index * region_size_;};
     inline uint64_t get_region_block_addr(uint32_t region_index, uint32_t block_offset) {return heap_start_ + region_index * region_size_ + block_offset * block_size_;} ;
     inline uint32_t get_region_block_rkey(uint32_t region_index, uint32_t block_offset) {return block_rkey_[region_index*block_per_region + block_offset].load().main_rkey_;};
 
-    int fetch_region_block(section_e &alloc_section, region_e &alloc_region, uint64_t &addr, uint32_t &rkey, bool is_exclusive, uint32_t region_index) ;
+    int fetch_region_block(section_e &alloc_section, region_e &alloc_region, uint64_t &addr, uint32_t &rkey, bool is_exclusive, uint32_t region_index, uint16_t block_class) ;
 
     inline bool set_block_rkey(uint64_t index, uint32_t rkey) {
         rkey_table_e table = block_rkey_[index].load();

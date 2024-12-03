@@ -75,10 +75,9 @@ public:
     inline bool check_section(section_e alloc_section, alloc_advise advise, uint32_t offset);
     bool force_update_section_state(section_e &section, uint32_t region_index, alloc_advise advise);
     bool force_update_section_state(section_e &section, uint32_t region_index, alloc_advise advise, alloc_advise compare);
-    bool force_update_region_state(region_e &alloc_region, uint32_t region_index, bool is_exclusive, bool on_use);
-    int find_section(section_e &alloc_section, uint32_t &section_offset, alloc_advise advise) ;
+    int find_section(section_e &alloc_section, uint32_t &section_offset, uint16_t size_class, alloc_advise advise) ;
 
-    int fetch_region(section_e &alloc_section, uint32_t section_offset, bool shared, bool use_chance, region_e &alloc_region, uint32_t &region_index) ;
+    int fetch_region(section_e &alloc_section, uint32_t section_offset, uint16_t size_class, bool use_chance, region_e &alloc_region, uint32_t &region_index, uint32_t skip_mask) ;
     bool fetch_exclusive_region_rkey(uint32_t region_index, rkey_table_e* rkey_list) {
         // uint32_t new_rkey[block_per_region];
         // memset(new_rkey, (uint32_t)-1, sizeof(uint32_t)*block_per_region);
@@ -125,19 +124,26 @@ public:
         return new_rkey.main_rkey_;
     };
     
-    int fetch_region_block(section_e &alloc_section, region_e &alloc_region, uint64_t &addr, uint32_t &rkey, bool is_exclusive, uint32_t region_index) ;
+    int fetch_region_block(section_e &alloc_section, region_e &alloc_region, uint64_t &addr, uint32_t &rkey, bool is_exclusive, uint32_t region_index, uint16_t block_class) ;
     int fetch_region_batch(section_e &alloc_section, region_e &alloc_region, mr_rdma_addr* addr, uint64_t num, bool is_exclusive, uint32_t region_index) ;
-    int free_region_block(uint64_t addr, bool is_exclusive) ;
+    int free_region_block(uint64_t addr, bool is_exclusive, uint16_t block_class) ;
     int free_region_batch(uint32_t region_offset, uint32_t free_bitmap, bool is_exclusive);
 
+    int full_alloc(section_e &alloc_section, uint32_t &section_offset, uint16_t size_class, uint64_t &addr, uint32_t &rkey);
+    int full_free(uint64_t addr, uint16_t block_class);
+
     int fetch_block(uint64_t &block_hint, uint64_t &addr, uint32_t &rkey) ;
+    int region_alloc(section_e &alloc_section, uint32_t &section_offset, uint16_t size_class, uint64_t &addr, uint32_t &rkey);
+    int chunk_alloc(section_e &alloc_section, uint32_t &section_offset, uint16_t size_class, bool use_chance, uint64_t &addr, uint32_t &rkey);
+    
     int free_block(uint64_t addr) ;
+    int section_alloc(uint32_t &section_offset, uint16_t size_class, uint64_t &addr, uint32_t &rkey);
 
     int fetch_block_bitmap(uint64_t &block_hint, uint64_t &addr, uint32_t &rkey) ;
     int free_block_bitmap(uint64_t addr) ;
 
 
-    private:
+private:
 
     struct ibv_mr *rdma_register_memory(void *ptr, uint64_t size);
 
