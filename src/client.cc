@@ -3821,16 +3821,16 @@ boost::fibers::fiber Client::start_polling_fiber() {
 }
 
 void Client::start_gc_fiber() {
-    // boost::fibers::fiber fb(client_gc_fb, (void *)this);
+    boost::fibers::fiber fb(client_gc_fb, (void *)this);
     
-    pthread_create(&gc_thread_, NULL, client_gc_fb, (void *)this);
-    // gc_fb_ = std::move(fb);
+    // pthread_create(&gc_thread_, NULL, client_gc_fb, (void *)this);
+    gc_fb_ = std::move(fb);
 }
 
 void Client::stop_gc_fiber() {
     stop_gc_ = true;
-    pthread_join(gc_thread_, NULL);
-    // gc_fb_.join();
+    // pthread_join(gc_thread_, NULL);
+    gc_fb_.join();
 }
 
 void Client::stop_polling_thread() {
@@ -5157,9 +5157,9 @@ uint64_t Client::reclaim(double &ratio) {
             // if(!is_freed || num_ == 0)
             //     break;
         }
-        if(temple_free > temple_block){
-            printf("error!%d:%d\n", temple_free, temple_block);
-        }
+        // if(temple_free > temple_block){
+        //     printf("error!%d:%d\n", temple_free, temple_block);
+        // }
         if(temple_free == temple_block ){
             //TODO: free the block addr_
             // printf("%d,%d, %d\n", temple_free, temple_block, size_);
@@ -5174,7 +5174,7 @@ uint64_t Client::reclaim(double &ratio) {
                 nm_->get_alloc_connection()->full_free(addr_, 0);
             }
             else if (use_cxl){
-                nm_->get_alloc_connection()->free_block(addr_);
+                nm_->get_alloc_connection()->free_block(addr_, 0);
             }
             else if (use_ipc){
                 bool result;
@@ -5214,7 +5214,7 @@ void * client_gc_fb(void * arg) {
         // GC every 5 seconds
         int num_sleep = 0;
         while (num_sleep < 10) {
-            // boost::this_fiber::sleep_for(std::chrono::seconds(1));
+            boost::this_fiber::sleep_for(std::chrono::seconds(1));
             gettimeofday(&et, NULL);
             if (client->stop_gc_ == true) 
                 return NULL;

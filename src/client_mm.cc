@@ -497,7 +497,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
             one_sided_alloc(nm->get_alloc_connection(),addr, rkey);
         }
         else if (use_cxl){
-            nm->get_alloc_connection()->fetch_block(hint, addr, rkey);
+            nm->get_alloc_connection()->fetch_block(hint, addr, rkey, 0);
         }
         else if (use_ipc){
             bool result;

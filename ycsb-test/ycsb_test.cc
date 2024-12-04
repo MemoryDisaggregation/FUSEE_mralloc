@@ -519,7 +519,12 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
     }
     // client.stop_gc_fiber();
     args->free_size = client.free_batch();
-
+    
+    printf("scan finished\n");
+    // if(args->thread_id == 0){
+    //   getchar();
+    // }
+    // global_barrier.wait();
     pthread_barrier_wait(args->timer_barrier);
 
     args->free_size = client.reclaim(args->ratio);
