@@ -23,7 +23,7 @@ namespace mralloc {
 
 #define RESOLVE_TIMEOUT_MS 5000
 
-	const int retry_threshold = 10;
+const int retry_threshold = 10;
 // const int retry_threshold = 100000;
 // const int low_threshold = 100000;
 const int low_threshold = 2;
@@ -50,8 +50,7 @@ public:
                     uint32_t rkey);
     bool remote_CAS(uint64_t swap, uint64_t* compare, uint64_t remote_addr, 
                         uint32_t rkey);
-    int remote_fetch_block(uint64_t &addr, uint32_t &rkey, uint64_t size);
-    int remote_fetch_block(uint64_t &addr, uint32_t &rkey);
+    int remote_fetch_block(uint64_t &addr, uint32_t &rkey, uint16_t size_class);
     int remote_free_block(uint64_t addr);
     int remote_mw(uint64_t addr, uint32_t rkey, uint64_t size, uint32_t &newkey);
     int remote_rebind(uint64_t addr, uint32_t &newkey);
@@ -193,6 +192,10 @@ private:
 
     uint64_t retry_counter_;
     std::mt19937 mt;
+
+    region_e cache_region;
+    int cache_region_index = -1;
+
 };
 
 

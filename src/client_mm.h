@@ -21,9 +21,9 @@
 #define MAX_NUM_SUBBLOCKS 4
 #define MAX_WATER_MARK 0.7
 
-const bool use_rpc = false;
+const bool use_rpc = true;
 
-const bool use_cxl = true;
+const bool use_cxl = false;
 
 const bool use_bitmap = false;
 

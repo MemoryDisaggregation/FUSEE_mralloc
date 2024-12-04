@@ -157,6 +157,7 @@ int32_t ClientMM::dyn_get_new_block_from_server(UDPNetworkManager * nm) {
     server_id_list[0] = pr_server_id;
     ret = alloc_from_sid(pr_server_id, nm, TYPE_KVBLOCK, &mr_info_list[0]);
     if (mr_info_list[0].addr == 0) {
+        printf("error addr: %lx\n", mr_info_list[0].addr);
         return -1;
     }
 
@@ -489,7 +490,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         struct timeval start, end;
         gettimeofday(&start, NULL);
         if(use_rpc)
-            nm->get_alloc_connection()->remote_fetch_block(addr, rkey);
+            nm->get_alloc_connection()->remote_fetch_block(addr, rkey, 0);
         else if (use_reg)
             nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
         else if (use_oneside){
