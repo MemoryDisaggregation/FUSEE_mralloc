@@ -13,7 +13,7 @@
 
     "server_base_addr":  "0x10000000",
     "server_data_len":    193273528320,
-    "block_size":       4096,
+    "block_size":       2097152,
     "subblock_size":     512,
     "client_local_size": 21474836480,
 

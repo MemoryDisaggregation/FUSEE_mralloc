@@ -50,7 +50,7 @@ int main(int argc, char ** argv) {
         tid_list[i] = tid;
     }
 
-    uint32_t total_tpt = 0;
+    uint64_t total_tpt = 0;
     uint32_t total_failed = 0;
     uint64_t total_freed = 0;
     double total_ratio = 0;
@@ -75,6 +75,7 @@ int main(int argc, char ** argv) {
     for (int i = 0; i < 1000; i ++) {
         fprintf(lat_fp, "%ld\n", total_lat[i]);
     }
+    fprintf(lat_fp, "%ld\n",(total_tpt-total_failed)/config.workload_run_time);
     fclose(lat_fp);
     ProfilerStop();
 

@@ -5045,7 +5045,7 @@ uint64_t Client::free_batch() {
         // sscanf(str->c_str(), "%ld@%d", &target_addr, &target_sid);
         // target_addr = read_addr; target_sid = read_sid;
         // printf("addr:%ld\n", target_addr);
-        // printf("addr: %lx@%d, send:%lx\n", target_addr, target_sid, it->second);
+        //printf("addr: %lx@%d, send:%lx\n", target_addr, target_sid, it->second);
         free_in_act += __builtin_popcountll(it->second);
         // if(__builtin_popcountll(it->second) > 7 || it->second > 254){
         //     printf("free error!, %lx\n", it->second);
@@ -5072,11 +5072,11 @@ uint64_t Client::free_batch() {
         faa_wr.wr.atomic.compare_add = it->second;
 
         nm_->rdma_post_send_batch_async(target_sid, &faa_wr);
-        uint64_t ret = nm_->nm_poll_completion_sync(wait_wrid_wc_map);
-        assert(ret == 0);
-        if (wait_wrid_wc_map[faa_wr.wr_id]->status != IBV_WC_SUCCESS) {
-            printf("wc error\n");
-        }
+        uint64_t ret = poll_completion(wait_wrid_wc_map);
+        // assert(ret == 0);
+        // if (wait_wrid_wc_map[faa_wr.wr_id]->status != IBV_WC_SUCCESS) {
+           // printf("wc error\n");
+        // }
         // TODO: this yield make the gc uncompletely?
         // boost::this_fiber::yield();
         // if (stop_gc_ == true) 

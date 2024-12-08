@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <cmath>
 
 #include "kv_debug.h"
 #include "hashtable.h"
@@ -462,17 +463,17 @@ struct alloc_metadata {
 
 thread_local alloc_metadata dm_metadata = {};
 
-int one_sided_free(mralloc::RDMAConnection* conn, uint64_t addr) {
-    int retry_time = conn->full_free(addr, 0);
+int ClientMM::one_sided_free(mralloc::RDMAConnection* conn, uint64_t addr) {
+    int retry_time = conn->full_free(addr, int(log2(mm_block_sz_/4096)));
     return retry_time;
 }
 
-int one_sided_alloc(mralloc::RDMAConnection* conn, uint64_t &addr, uint32_t &rkey) {
+int ClientMM::one_sided_alloc(mralloc::RDMAConnection* conn, uint64_t &addr, uint32_t &rkey) {
     if(dm_metadata.initied == false){
-        conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 0, mralloc::alloc_light);
+        conn->find_section(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, int(log2(mm_block_sz_/4096)), mralloc::alloc_light);
         dm_metadata.initied = true;
     }
-    int retry_time = conn->full_alloc(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, 0, addr, rkey);
+    int retry_time = conn->full_alloc(*(mralloc::section_e*)(&dm_metadata.cache_section), dm_metadata.cache_section_index, int(log2(mm_block_sz_/4096)), addr, rkey);
     return retry_time;
 }
 
@@ -490,14 +491,14 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         struct timeval start, end;
         gettimeofday(&start, NULL);
         if(use_rpc)
-            nm->get_alloc_connection()->remote_fetch_block(addr, rkey, 0);
+            nm->get_alloc_connection()->remote_fetch_block(addr, rkey, int(log2(mm_block_sz_/4096)));
         else if (use_reg)
             nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
         else if (use_oneside){
             one_sided_alloc(nm->get_alloc_connection(),addr, rkey);
         }
         else if (use_cxl){
-            nm->get_alloc_connection()->fetch_block(hint, addr, rkey, 0);
+            nm->get_alloc_connection()->fetch_block(hint, addr, rkey, int(log2(mm_block_sz_/4096)));
         }
         else if (use_ipc){
             bool result;

@@ -21,9 +21,9 @@
 #define MAX_NUM_SUBBLOCKS 4
 #define MAX_WATER_MARK 0.7
 
-const bool use_rpc = false;
+const bool use_rpc =   true;
 
-const bool use_cxl = true;
+const bool use_cxl = false;
 
 const bool use_bitmap = false;
 
@@ -147,7 +147,8 @@ private:
             __OUT struct MrInfo * mr_info);
     void update_mm_block_next(ClientMMBlock * mm_block);
     int remote_write_meta_addr(UDPNetworkManager * nm);
-
+    int one_sided_alloc(mralloc::RDMAConnection* conn, uint64_t &addr, uint32_t &rkey);
+    int one_sided_free(mralloc::RDMAConnection* conn, uint64_t addr);
     int mm_recovery(UDPNetworkManager * nm);
     int mm_recover_prepare_space(UDPNetworkManager * nm);
     int get_remote_log_header(UDPNetworkManager * nm, uint8_t server_id, uint64_t r_addr, 

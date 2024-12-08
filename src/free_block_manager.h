@@ -29,10 +29,16 @@ namespace mralloc {
 // #define REMOTE_MEM_SIZE 1048576
 // #define REMOTE_MEM_SIZE 524288
 // #define REMOTE_MEM_SIZE 65536
-#define REMOTE_MEM_SIZE 4096
+// #define REMOTE_MEM_SIZE 4096
 // #define REMOTE_MEM_SIZE 131072
 
-#define INIT_MEM_SIZE ((uint64_t)60*1024*1024*1024)
+#define REMOTE_MEM_SIZE 4096
+// #define REMOTE_MEM_SIZE 16384
+// #define REMOTE_MEM_SIZE 65536
+// #define REMOTE_MEM_SIZE 2097152
+
+
+#define INIT_MEM_SIZE ((uint64_t)160*1024*1024*1024)
 
 const uint64_t large_block_items = 64;
 
@@ -86,11 +92,11 @@ struct section_e {
     // max_length, 1~32 
     uint16_t retry_ : 2;
     // [TODO] no used?
-    uint16_t exclusive_ : 1;
+    // uint16_t exclusive_ : 1;
     // on use to check whether it has been freed
     uint16_t on_use_ : 1;
     uint16_t last_offset_ : 5;
-    uint16_t last_timestamp_ : 7;
+    uint16_t last_timestamp_ : 8;
     uint16_t num : 3;
     uint16_t last_modify_id_ : 13;
 };
@@ -270,7 +276,7 @@ public:
 
     bool init(uint64_t meta_addr, uint64_t addr, uint64_t size, uint32_t rkey);
 
-    uint64_t print_section_info(int cache, int reg_size) {
+    uint64_t print_section_info(int cache, uint64_t reg_size) {
         uint64_t empty=0, exclusive=0;
         uint64_t used = 0;
         double utilization = 0;
@@ -284,7 +290,7 @@ public:
                 used += use_counter;
                 if(use_counter > 0){
                     managed += 1;
-                    utilization += 1.0*use_counter/block_per_region;
+                    // utilization += 1.0*use_counter/block_per_region;
                 }
                 empty_map >>= 1;
                 exclusive_map >>= 1;
@@ -298,7 +304,7 @@ public:
             }
         }
         // mem_record_ << 1.0*managed/(section_num_*region_per_section) << "," << utilization/managed << ", "<< (used-cache)*REMOTE_MEM_SIZE + (long long)reg_size*1024*1024 << std::endl;
-        mem_record_ << (used-cache)*REMOTE_MEM_SIZE + (long long)reg_size << std::endl;
+        mem_record_ << (used-cache)*REMOTE_MEM_SIZE + reg_size << std::endl;
         return (used-cache)*REMOTE_MEM_SIZE + reg_size;
     }
 

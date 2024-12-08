@@ -468,7 +468,7 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
     if(args->thread_id == 0){
       getchar();
     }
-    // client.start_gc_fiber();
+     //client.start_gc_fiber();
     printf("Test phase start\n");
     boost::fibers::barrier global_barrier(client.num_coroutines_ + 1);
     ClientFiberArgs * fb_args_list = (ClientFiberArgs *)malloc(sizeof(ClientFiberArgs) * client.num_coroutines_);
@@ -517,13 +517,13 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
         }
         printf("fb%d finished\n", fb_args_list[i].coro_id);
     }
-    // client.stop_gc_fiber();
+     //client.stop_gc_fiber();
     args->free_size = client.free_batch();
     
     printf("scan finished\n");
-    // if(args->thread_id == 0){
-    //   getchar();
-    // }
+    if(args->thread_id == 0){
+       //getchar();
+     }
     // global_barrier.wait();
     pthread_barrier_wait(args->timer_barrier);
 
