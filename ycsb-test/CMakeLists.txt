@@ -21,12 +21,14 @@ target_compile_options(ycsb_test_multi_client
 )
 
 target_link_libraries(ycsb_test
+    hiredis
     libddckv
     pthread
     ibverbs
 )
 
 target_link_libraries(ycsb_test_multi_client
+    hiredis
     profiler
     libddckv
     ycsb_test

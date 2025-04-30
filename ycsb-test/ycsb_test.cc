@@ -7,6 +7,7 @@
 
 #include "client.h"
 #include "client_cr.h"
+#include "hiredis/hiredis.h"
 
 int is_valid_workload(char * workload_name) {
     return strcmp(workload_name, "workloada") == 0 || strcmp(workload_name, "workloadb") == 0 ||
@@ -466,7 +467,22 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
     assert(ret == 0);
     printf("load finished\n");
     if(args->thread_id == 0){
-      getchar();
+    //   getchar();
+        redisContext *redis_conn;
+        redisReply *redis_reply;
+        struct timeval timeout = { 1, 500000 }; // 1.5 seconds
+        redis_conn = redisConnectWithTimeout("10.10.1.1", 2222, timeout);
+        redis_reply = (redisReply*)redisCommand(redis_conn, "DECR stage1");
+        // int count = redis_reply->integer;
+        if(redis_reply->integer != 0){
+            redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+            while(atoi(redis_reply->str) != 0){
+                freeReplyObject(redis_reply);
+                redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+                printf("GET: %s\n", redis_reply->str);
+            }
+        }
+        freeReplyObject(redis_reply);
     }
      //client.start_gc_fiber();
     printf("Test phase start\n");
@@ -1042,7 +1058,10 @@ void * run_client(void * _args) {
     printf("Client %d start\n", args->thread_id);
 
     pthread_t polling_tid = client.start_polling_thread();
-
+    redisContext *redis_conn;
+    redisReply *redis_reply;
+    struct timeval timeout = { 1, 500000 }; // 1.5 seconds
+    redis_conn = redisConnectWithTimeout("10.10.1.1", 2222, timeout);
     // if (args->thread_id < 2 && config.server_id - config.memory_num < 80) {
 #ifdef YCSB_10M
     if (args->thread_id < 2 && config.server_id - config.memory_num < 2) {
@@ -1064,13 +1083,36 @@ void * run_client(void * _args) {
         // ret = load_large_workload_2_coro(client, workload_fnames);
         // ret = load_large_workload(client, workload_fnames);
         assert(ret == 0);
-        if (i == 0)
-            getchar();  // use an input to synchronize
+        if (i == 0){
+            redis_reply = (redisReply*)redisCommand(redis_conn, "DECR stage1");
+            // int count = redis_reply->integer;
+            if(redis_reply->integer != 0){
+                redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+                while(atoi(redis_reply->str) != 0){
+                    freeReplyObject(redis_reply);
+                    redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+                    printf("GET: %s\n", redis_reply->str);
+                }
+            }
+            freeReplyObject(redis_reply);
+        }
+            // getchar();  // use an input to synchronize
         pthread_barrier_wait(args->load_barrier);
     } else if (args->thread_id == 0) {
         assert(config.server_id - config.memory_num != 0);
         printf("%d press to start!\n");
-        getchar();  // use an input to synchronize
+        redis_reply = (redisReply*)redisCommand(redis_conn, "DECR stage1");
+            // int count = redis_reply->integer;
+            if(redis_reply->integer != 0){
+                redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+                while(atoi(redis_reply->str) != 0){
+                    freeReplyObject(redis_reply);
+                    redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+                    printf("GET: %s\n", redis_reply->str);
+                }
+            }
+            freeReplyObject(redis_reply);
+        // getchar();  // use an input to synchronize
         pthread_barrier_wait(args->load_barrier);
     } else {
         printf("%d waiting workload\n", args->thread_id);
