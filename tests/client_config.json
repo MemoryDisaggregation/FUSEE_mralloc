@@ -7,7 +7,7 @@
     "memory_ips": [
         "10.10.1.2"
     ],
-    "ib_dev_id": 2,
+    "ib_dev_id": 3,
     "ib_port_id": 1,
     "ib_gid_idx": 0,
 
@@ -24,8 +24,8 @@
     "micro_workload_num": 10000,
     "workload_run_time": 60,
     
-    "main_core_id": 3,
-    "poll_core_id": 4,
-    "bg_core_id": 5,
-    "gc_core_id": 6
+    "main_core_id": 16,
+    "poll_core_id": 17,
+    "bg_core_id": 18,
+    "gc_core_id": 19
 }
