@@ -8,6 +8,9 @@
 #include "ycsb_test.h"
 #include "hiredis/hiredis.h"
 
+extern alloc_method alloc_method_ ;
+
+
 int main(int argc, char ** argv) {
     if (argc != 4) {
         printf("Usage: %s path-to-config-file workload-name num-clients methods\n", argv[0]);

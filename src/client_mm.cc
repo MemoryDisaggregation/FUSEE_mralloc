@@ -14,6 +14,8 @@
 
 #define REC_SPACE_SIZE (64 * 1024 * 1024)
 
+extern alloc_method alloc_method_ ;
+
 ClientMM::ClientMM(const struct GlobalConfig * conf, UDPNetworkManager * nm) {
     int ret = 0;
     client_meta_addr_ = conf->server_base_addr 
@@ -52,7 +54,7 @@ ClientMM::ClientMM(const struct GlobalConfig * conf, UDPNetworkManager * nm) {
 
     // construct block mapping
     get_block_map();
-    if(use_ipc)
+    if(alloc_method_ == pool_alloc)
         cpu_cache_ = new mralloc::cpu_cache();
     else cpu_cache_ = NULL;
     // assert(cpu_cache_!=NULL);

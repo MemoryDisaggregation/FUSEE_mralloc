@@ -1,6 +1,8 @@
 #ifndef DDCKV_CLIENT_MM_H_
 #define DDCKV_CLIENT_MM_H_
 
+#pragma once
+
 #include <bits/stdint-uintn.h>
 #include <infiniband/verbs.h>
 
@@ -23,7 +25,7 @@
 
 enum alloc_method { cxl_shm_alloc, fusee_alloc, share_alloc, pool_alloc};
 
-alloc_method alloc_method_  = share_alloc;
+static alloc_method alloc_method_  = share_alloc;
 
 // const bool use_rpc =   true;
 

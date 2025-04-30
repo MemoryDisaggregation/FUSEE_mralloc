@@ -29,6 +29,8 @@
 #define READ_PR_ST_WRID     250
 #define FAA_WRID            350
 
+extern alloc_method alloc_method_ ;
+
 Client::Client(const struct GlobalConfig * conf) {
     gettimeofday(&recover_st_, NULL);
     num_idx_rep_             = conf->num_idx_rep;
