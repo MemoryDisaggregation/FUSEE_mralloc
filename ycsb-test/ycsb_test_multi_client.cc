@@ -10,14 +10,23 @@
 
 int main(int argc, char ** argv) {
     if (argc != 4) {
-        printf("Usage: %s path-to-config-file workload-name num-clients\n", argv[0]);
+        printf("Usage: %s path-to-config-file workload-name num-clients methods\n", argv[0]);
         return 1;
     }
     ProfilerStart("ycsbc.prof");
 
     WorkloadFileName * workload_fnames = get_workload_fname(argv[2]);
     int num_clients = atoi(argv[3]);
-
+    std::string allocator_type = argv[4];
+    if (allocator_type == "cxl")
+        alloc_method_ = cxl_shm_alloc;
+    else if (allocator_type == "fusee") 
+        alloc_method_ = fusee_alloc;
+    else if (allocator_type == "share")
+        alloc_method_  = share_alloc;
+    else if (allocator_type == "pool")
+        alloc_method_  = pool_alloc;
+   
     GlobalConfig config;
     int ret = load_config(argv[1], &config);
     assert(ret == 0);

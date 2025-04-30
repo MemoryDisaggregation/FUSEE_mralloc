@@ -5165,22 +5165,23 @@ uint64_t Client::reclaim(double &ratio) {
             // printf("%d,%d, %d\n", temple_free, temple_block, size_);
             free_sum += mm_->mm_block_sz_;
             free_sum_block += temple_free;
-            if(use_rpc)
+            if(alloc_method_ == fusee_alloc)
                 nm_->get_alloc_connection()->remote_free_block(addr_);
-            else if (use_reg)
-                printf("dereg unfinished\n");
-            else if (use_oneside){
+            // else if (use_reg)
+            //     printf("dereg unfinished\n");
+            else if (alloc_method_ == share_alloc){
                 // printf("free addr: %lx\n", addr_);
                 nm_->get_alloc_connection()->full_free(addr_, 0);
             }
-            else if (use_cxl){
+            else if (alloc_method_ == cxl_shm_alloc){
                 nm_->get_alloc_connection()->free_block(addr_, 0);
             }
-            else if (use_ipc){
+            else if (alloc_method_ == pool_alloc){
                 bool result;
                 mralloc::mr_rdma_addr remote_addr;
                 uint64_t index;
                 printf("ipc unfinished\n");
+                // cpu_cache_->free
             }
             // free(*it);
             // free(mm_->get_mm_blocks()->at(j+offset));

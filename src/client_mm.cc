@@ -490,21 +490,21 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         // TODO: using shared cpu cache to fill 
         struct timeval start, end;
         gettimeofday(&start, NULL);
-        if(use_rpc)
+        if(alloc_method_ == fusee_alloc)
             nm->get_alloc_connection()->remote_fetch_block(addr, rkey, int(log2(mm_block_sz_/4096)));
-        else if (use_reg)
-            nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
-        else if (use_oneside){
+        // else if (use_reg)
+        //     nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
+        else if (alloc_method_ == share_alloc){
             one_sided_alloc(nm->get_alloc_connection(),addr, rkey);
         }
-        else if (use_cxl){
+        else if (alloc_method_ == cxl_shm_alloc){
             nm->get_alloc_connection()->fetch_block(hint, addr, rkey, int(log2(mm_block_sz_/4096)));
         }
-        else if (use_ipc){
+        else if (alloc_method_ == pool_alloc){
             bool result;
             mralloc::mr_rdma_addr remote_addr;
             uint64_t index;
-            result = cpu_cache_->malloc(1024, remote_addr, index);
+            result = cpu_cache_->malloc(int(log2(mm_block_sz_/4096)), remote_addr, index);
             addr = remote_addr.addr;
             rkey = remote_addr.rkey;
         }

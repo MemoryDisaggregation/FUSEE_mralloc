@@ -21,17 +21,21 @@
 #define MAX_NUM_SUBBLOCKS 4
 #define MAX_WATER_MARK 0.7
 
-const bool use_rpc =   true;
+enum alloc_method { cxl_shm_alloc, fusee_alloc, share_alloc, pool_alloc};
 
-const bool use_cxl = false;
+alloc_method alloc_method_  = share_alloc;
 
-const bool use_bitmap = false;
+// const bool use_rpc =   true;
 
-const bool use_oneside = false;
+// const bool use_cxl = false;
 
-const bool use_ipc = false;
+// const bool use_bitmap = false;
 
-const bool use_reg = false;
+// const bool use_oneside = false;
+
+// const bool use_ipc = false;
+
+// const bool use_reg = false;
 
 typedef struct TagClientMMBlock {
     struct MrInfo mr_info_list[MAX_REP_NUM];
