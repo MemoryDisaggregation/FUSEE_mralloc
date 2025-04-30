@@ -5,7 +5,7 @@
     "udp_port": 1145,
     "memory_num": 1,
     "memory_ips": [
-        "10.10.1.2"
+        "10.10.1.1"
     ],
     "ib_dev_id": 3,
     "ib_port_id": 1,
