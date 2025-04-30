@@ -12,7 +12,7 @@ extern alloc_method alloc_method_ ;
 
 
 int main(int argc, char ** argv) {
-    if (argc != 4) {
+    if (argc != 5) {
         printf("Usage: %s path-to-config-file workload-name num-clients methods\n", argv[0]);
         return 1;
     }
