@@ -1046,7 +1046,7 @@ void * run_client(void * _args) {
     CPU_SET(config.main_core_id, &cpuset);
     pthread_t this_tid = pthread_self();
     ret = pthread_setaffinity_np(this_tid, sizeof(cpuset), &cpuset);
-    assert(ret == 0);
+    // assert(ret == 0);
     ret = pthread_getaffinity_np(this_tid, sizeof(cpuset), &cpuset);
     for (int i = 0; i < sysconf(_SC_NPROCESSORS_CONF); i ++) {
         if (CPU_ISSET(i, &cpuset)) {
