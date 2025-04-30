@@ -123,7 +123,7 @@ typedef struct mi_segment_migrate {
 };
 
 const uint64_t BITMAP_SIZE = (uint64_t)1024*1024*1024*16;
-const uint32_t nprocs = 144;
+const uint32_t nprocs = 16;
 const uint32_t max_alloc_item = 16;
 const uint32_t max_free_item = 16;
 
@@ -414,10 +414,12 @@ public:
     sem_t* retbell[nprocs];
     sem_t* lock[nprocs];
 
+    bool freed = false;
+
     cpu_cache() {
         int fd = shm_open("/cpu_cache", O_RDWR, 0);
-        int bitmap_fd = shm_open("/bitmaps", O_RDWR, 0);
-        if (fd == -1 || bitmap_fd == -1) {
+        // int bitmap_fd = shm_open("/bitmaps", O_RDWR, 0);
+        if (fd == -1) {
             perror("init failed, no computing node running");
         } else {
             int port_flag = PROT_READ | PROT_WRITE;
@@ -437,16 +439,16 @@ public:
         int port_flag = PROT_READ | PROT_WRITE;
         int mm_flag   = MAP_SHARED; 
         int fd = shm_open("/cpu_cache", O_RDWR, 0);
-        int bitmap_fd = shm_open("/bitmaps", O_RDWR, 0);
-        if(fd==-1 || bitmap_fd==-1){
+        // int bitmap_fd = shm_open("/bitmaps", O_RDWR, 0);
+        if(fd==-1){
             fd = shm_open("/cpu_cache", O_CREAT | O_EXCL | O_RDWR, 0600);
-            bitmap_fd = shm_open("/bitmaps", O_CREAT | O_EXCL | O_RDWR, 0600);
+            // bitmap_fd = shm_open("/bitmaps", O_CREAT | O_EXCL | O_RDWR, 0600);
             if(ftruncate(fd, sizeof(CpuBuffer)*nprocs)){
                 perror("create shared memory failed");
             }
-            if(ftruncate(bitmap_fd, BITMAP_SIZE)){
-                perror("create shared memory failed");
-            }
+            // if(ftruncate(bitmap_fd, BITMAP_SIZE)){
+            //     perror("create shared memory failed");
+            // }
             buffer_ = (CpuBuffer*)mmap(NULL, sizeof(CpuBuffer)*nprocs, port_flag, mm_flag, fd, 0);
             bitmap_ = (std::atomic<uint64_t>*)mmap(NULL, BITMAP_SIZE, port_flag, mm_flag, fd, 0);
             for(int i = 0; i < nprocs; i++) {
@@ -473,6 +475,17 @@ public:
     ~cpu_cache(){
         if(buffer_)
             munmap(buffer_, sizeof(CpuBuffer)*nprocs);
+        // if(!freed){
+        for(int i=0; i<nprocs; i++){
+            sem_close(doorbell[i]);
+            sem_close(retbell[i]);
+            sem_close(lock[i]);
+        }
+        //     if(buffer_)
+        //         munmap(buffer_,  sizeof(CpuBuffer)*nprocs);
+        //     shm_unlink("/cpu_cache");
+        //     freed = true;
+        // }
     }
 
     uint64_t bitmap_malloc(uint64_t bin_size){
@@ -488,17 +501,21 @@ public:
 
     void free_cache(){
         // only the global host side need call this, to free all cpu_cache 
-        for(int i=0; i<nprocs; i++){
-            sem_close(doorbell[i]);
-            sem_unlink(std::to_string(buffer_[i].doorbell_id).c_str());
-            sem_close(retbell[i]);
-            sem_unlink(std::to_string(buffer_[i].retbell_id).c_str());
-            sem_close(lock[i]);
-            sem_unlink(std::to_string(buffer_[i].lock_id).c_str());
+        // printf("free\n");
+        if(!freed){
+            for(int i=0; i<nprocs; i++){
+                sem_close(doorbell[i]);
+                sem_unlink(std::to_string(buffer_[i].doorbell_id).c_str());
+                sem_close(retbell[i]);
+                sem_unlink(std::to_string(buffer_[i].retbell_id).c_str());
+                sem_close(lock[i]);
+                sem_unlink(std::to_string(buffer_[i].lock_id).c_str());
+            }
+            if(buffer_)
+                munmap(buffer_,  sizeof(CpuBuffer)*nprocs);
+            shm_unlink("/cpu_cache");
+            freed = true;
         }
-        if(buffer_)
-            munmap(buffer_,  sizeof(CpuBuffer)*nprocs);
-        shm_unlink("/cpu_cache");
     }
 
     bool malloc(uint64_t bin_size, mr_rdma_addr &addr, uint64_t &shm_index){
@@ -552,7 +569,10 @@ public:
         }
         sem_wait(lock[nproc]);
         buffer_[nproc].opcode_ = LegoOpcode::LegoFree;
-        *(mr_rdma_addr*)buffer_[nproc].buffer_ = addr;
+        ((mr_rdma_addr*)buffer_[nproc].buffer_)->addr = addr.addr;
+        ((mr_rdma_addr*)buffer_[nproc].buffer_)->rkey = addr.rkey;
+        ((mr_rdma_addr*)buffer_[nproc].buffer_)->size = addr.size;
+        ((mr_rdma_addr*)buffer_[nproc].buffer_)->node = addr.node;
         sem_post(doorbell[nproc]);
         // printf("send request to %d\n", nproc);
         sem_wait(retbell[nproc]);

@@ -1,12 +1,12 @@
 from os import close
 import sys
 
-# wlNameList = ['a', 'b', 'c', 'd', 'e', 'f', 's']
+wlNameList = ['a']
 # wlNameList = ['ins', 'rea', 'upd', 'del']
-wlNameList = ['100']
+# wlNameList = ['100']
 
-# wlTemplateList = ["./workloads/workload{}.spec_trans"]
-wlTemplateList = ["./workloads/workloadupd{}.spec_trans"]
+wlTemplateList = ["./workloads/workload{}.spec_trans"]
+# wlTemplateList = ["./workloads/workloadupd{}.spec_trans"]
 splitNum = int(sys.argv[1])
 
 for n in wlNameList:
