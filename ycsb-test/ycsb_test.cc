@@ -472,13 +472,13 @@ int load_test_cnt_ops_mt(Client & client, WorkloadFileName * workload_fnames, Ru
         redisReply *redis_reply;
         struct timeval timeout = { 1, 500000 }; // 1.5 seconds
         redis_conn = redisConnectWithTimeout("10.10.1.1", 2222, timeout);
-        redis_reply = (redisReply*)redisCommand(redis_conn, "DECR stage1");
+        redis_reply = (redisReply*)redisCommand(redis_conn, "DECR stage2");
         // int count = redis_reply->integer;
         if(redis_reply->integer != 0){
-            redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+            redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage2");    
             while(atoi(redis_reply->str) != 0){
                 freeReplyObject(redis_reply);
-                redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage1");    
+                redis_reply = (redisReply*)redisCommand(redis_conn, "GET stage2");    
                 printf("GET: %s\n", redis_reply->str);
             }
         }
