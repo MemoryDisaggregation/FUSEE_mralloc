@@ -6,14 +6,13 @@
 
 #include "client.h"
 #include "ycsb_test.h"
-#include <gperftools/profiler.h>
+#include "hiredis/hiredis.h"
 
 int main(int argc, char ** argv) {
     if (argc != 4) {
         printf("Usage: %s path-to-config-file workload-name num-clients methods\n", argv[0]);
         return 1;
     }
-    ProfilerStart("ycsbc.prof");
 
     WorkloadFileName * workload_fnames = get_workload_fname(argv[2]);
     int num_clients = atoi(argv[3]);
@@ -86,6 +85,14 @@ int main(int argc, char ** argv) {
     }
     fprintf(lat_fp, "%ld\n",(total_tpt-total_failed)/config.workload_run_time);
     fclose(lat_fp);
-    ProfilerStop();
+    redisContext *redis_conn;
+    redisReply *redis_reply;
+    struct timeval timeout = { 1, 500000 }; // 1.5 seconds
+    redis_conn = redisConnectWithTimeout("10.10.1.1", 2222, timeout);
+    redis_reply = (redisReply*)redisCommand(redis_conn, "INCRBYFLOAT avg %s", std::to_string((double)(total_tpt - total_failed) / config.workload_run_time).c_str());
+    printf("INCUR: %s\n", redis_reply->str);
+    freeReplyObject(redis_reply);
+    redis_reply = (redisReply*)redisCommand(redis_conn, "INCR finished");
+    freeReplyObject(redis_reply);
 
 }
