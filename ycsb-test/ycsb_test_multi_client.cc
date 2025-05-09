@@ -7,6 +7,7 @@
 #include "client.h"
 #include "ycsb_test.h"
 #include "hiredis/hiredis.h"
+#include "client_mm.h"
 
 extern alloc_method alloc_method_ ;
 

@@ -20,7 +20,7 @@
   "num_coroutines": 10,
   "miss_rate_threash": 0,
   "micro_workload_num": 10000,
-  "workload_run_time": 60,
+  "workload_run_time": 10,
   "main_core_id": 0,
   "poll_core_id": 1,
   "bg_core_id": 2,
