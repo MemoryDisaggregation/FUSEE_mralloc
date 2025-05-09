@@ -169,6 +169,7 @@ void * run_client(void * _args) {
     config.main_core_id = args->main_core_id;
     config.poll_core_id = args->poll_core_id;
     config.server_id += args->thread_id;
+    config.alloc_method_ = args->client_alloc_method_;
 
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);

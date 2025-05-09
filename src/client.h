@@ -134,6 +134,7 @@ private:
     uint32_t num_replication_;
     uint32_t num_memory_;
     uint32_t num_idx_rep_;
+    alloc_method alloc_method_ ;
 
     uint8_t  pr_log_server_id_;
     uint64_t pr_log_head_;

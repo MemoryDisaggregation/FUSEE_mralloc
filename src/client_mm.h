@@ -23,9 +23,6 @@
 #define MAX_NUM_SUBBLOCKS 4
 #define MAX_WATER_MARK 0.7
 
-enum alloc_method { cxl_shm_alloc, fusee_alloc, share_alloc, pool_alloc};
-
-static alloc_method alloc_method_  = share_alloc;
 
 // const bool use_rpc =   true;
 
@@ -94,6 +91,7 @@ private:
     uint32_t num_replication_;
     uint32_t num_idx_rep_;
     uint32_t num_memory_;
+    alloc_method alloc_method_ ;
 
     std::vector<ClientMMBlock *> mm_blocks_;
     spinlock_t mm_blocks_lock_;

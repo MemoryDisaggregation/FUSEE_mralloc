@@ -33,6 +33,7 @@ typedef struct TagRunClientArgs {
     uint32_t num_threads;
     uint64_t free_size;
     double ratio;
+    alloc_method client_alloc_method_; 
     
 } RunClientArgs;
 

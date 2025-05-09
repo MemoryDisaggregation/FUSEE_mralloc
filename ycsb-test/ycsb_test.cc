@@ -1039,6 +1039,7 @@ void * run_client(void * _args) {
     config.main_core_id = args->main_core_id;
     config.poll_core_id = args->poll_core_id;
     config.server_id    += args->thread_id;
+    config.alloc_method_ = args->client_alloc_method_;
 
     // bind this process to main core
     cpu_set_t cpuset;
@@ -1056,7 +1057,6 @@ void * run_client(void * _args) {
 
     Client client(&config);
     printf("Client %d start\n", args->thread_id);
-
     pthread_t polling_tid = client.start_polling_thread();
     redisContext *redis_conn;
     redisReply *redis_reply;

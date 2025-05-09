@@ -14,10 +14,9 @@
 
 #define REC_SPACE_SIZE (64 * 1024 * 1024)
 
-extern alloc_method alloc_method_ ;
-
 ClientMM::ClientMM(const struct GlobalConfig * conf, UDPNetworkManager * nm) {
     int ret = 0;
+    alloc_method_ = conf->alloc_method_;
     client_meta_addr_ = conf->server_base_addr 
         + CLIENT_META_LEN * (conf->server_id - conf->memory_num + 1) 
         + sizeof(ClientLogMetaInfo);

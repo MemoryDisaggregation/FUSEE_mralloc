@@ -32,6 +32,7 @@ typedef struct TagMicroRunClientArgs {
     uint32_t ret_fail_update_num;
     uint32_t ret_fail_search_num;
     uint32_t ret_fail_delete_num;
+    alloc_method client_alloc_method_; 
 
     uint32_t client_id;
     uint32_t num_threads;

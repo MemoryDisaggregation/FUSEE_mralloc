@@ -9,14 +9,12 @@
 #include "hiredis/hiredis.h"
 #include "client_mm.h"
 
-extern alloc_method alloc_method_ ;
-
-
 int main(int argc, char ** argv) {
     if (argc != 5) {
         printf("Usage: %s path-to-config-file workload-name num-clients methods\n", argv[0]);
         return 1;
     }
+    alloc_method alloc_method_ ;
 
     WorkloadFileName * workload_fnames = get_workload_fname(argv[2]);
     int num_clients = atoi(argv[3]);
@@ -57,6 +55,8 @@ int main(int argc, char ** argv) {
         client_args_list[i].ret_num_ops = 0;
         client_args_list[i].ret_faile_num = 0;
         client_args_list[i].num_threads = num_clients;
+        client_args_list[i].client_alloc_method_ = alloc_method_;
+
         pthread_t tid;
         pthread_create(&tid, NULL, run_client, &client_args_list[i]);
         tid_list[i] = tid;

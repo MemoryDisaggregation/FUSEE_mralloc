@@ -17,6 +17,8 @@
 #define SUBBLOCK_NUM_BMASK  0xF
 #define MAX_REP_NUM         10
 
+enum alloc_method { cxl_shm_alloc, fusee_alloc, share_alloc, pool_alloc};
+
 // #define YCSB_10M
 // #define SERVER_MM
 
@@ -79,6 +81,7 @@ struct GlobalConfig {
     float    miss_rate_threash;
     int      workload_run_time;
     int      micro_workload_num;
+    alloc_method alloc_method_;
 };
 
 struct GlobalInfo {
