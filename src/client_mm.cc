@@ -176,7 +176,8 @@ int32_t ClientMM::dyn_get_new_block_from_server(UDPNetworkManager * nm) {
     for (int i = 0; i < num_replication_ - 1; i ++) {
         uint8_t  sid = it->second[i] & 0xFF;
         uint64_t addr = (it->second[i] >> 8) << 8;
-        uint32_t rkey = nm->get_server_rkey(sid);
+        uint32_t rkey = get_rkey(addr);
+        // uint32_t rkey = nm->get_server_rkey(sid);
         mr_info_list[i + 1].addr = addr;
         mr_info_list[i + 1].rkey = rkey;
         server_id_list[i + 1] = sid;
@@ -211,7 +212,8 @@ int ClientMM::get_new_block_from_server(UDPNetworkManager * nm) {
     for (int i = 0; i < num_replication_ - 1; i ++) {
         uint8_t sid = it->second[i] & 0xFF;
         uint64_t addr = (it->second[i] >> 8) << 8;
-        uint32_t rkey = nm->get_server_rkey(sid);
+        uint32_t rkey = get_rkey(addr);
+        // uint32_t rkey = nm->get_server_rkey(sid);
         mr_info_list[i + 1].addr = addr;
         mr_info_list[i + 1].rkey = rkey;
         server_id_list[i + 1] = sid;
@@ -247,7 +249,8 @@ int ClientMM::init_get_new_block_from_server(UDPNetworkManager * nm) {
         for (int j = 0; j < num_replication_ - 1; j ++) {
             uint8_t sid = it->second[j] & 0xFF;
             uint64_t addr = (it->second[j] >> 8) << 8;
-            uint32_t rkey = nm->get_server_rkey(sid);
+            uint32_t rkey = get_rkey(addr);
+            // uint32_t rkey = nm->get_server_rkey(sid);
             mr_info_list[i][j + 1].addr = addr;
             mr_info_list[i][j + 1].rkey = rkey;
             server_id_list[i][j + 1] = sid;
@@ -486,6 +489,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     memset(&request, 0, sizeof(struct KVMsg));
     memset(&reply, 0, sizeof(struct KVMsg));
     uint32_t rkey; uint64_t addr;
+    uint32_t global_rkey;
     request.id = nm->get_server_id();
     if (alloc_type == TYPE_KVBLOCK) {
         // TODO: using shared cpu cache to fill 
@@ -509,7 +513,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
             addr = remote_addr.addr;
             rkey = remote_addr.rkey;
         }
-        rkey = nm->get_alloc_connection()->get_global_rkey();
+        global_rkey = nm->get_alloc_connection()->get_global_rkey();
         gettimeofday(&end, NULL);
         uint64_t time =  end.tv_usec + end.tv_sec*1000*1000 - start.tv_usec - start.tv_sec*1000*1000;
         avg_time_ = (avg_time_*count_ + time)/(count_ + 1);
@@ -533,7 +537,7 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
     //     // assert(reply.type == REP_ALLOC_SUBTABLE);
     // }
     mr_info->addr = addr;
-    mr_info->rkey = rkey;
+    mr_info->rkey = global_rkey;
     rkey_map_[addr] = rkey;
     // memcpy(mr_info, &reply.body.mr_info, sizeof(struct MrInfo));
     return 0;
@@ -588,7 +592,7 @@ int ClientMM::reg_new_space(const struct MrInfo * mr_info_list, const uint8_t * 
     // print_log(DEBUG, "[%s] send meta info to remote", __FUNCTION__);
     for (int i = 0; i < num_replication_; i ++) {
         // [mralloc support]
-        // uint32_t rkey = mr_info_list[i].rkey;
+        // safe
         uint32_t rkey = nm->get_server_rkey(i);
         // printf("[%s] writing to server(%d) addr(%lx) rkey(%x)", 
             // __FUNCTION__, i, client_meta_addr_, rkey);
@@ -623,8 +627,7 @@ int ClientMM::init_reg_space(struct MrInfo mr_info_list[][MAX_REP_NUM], uint8_t 
         }
 
         for (int i = 0; i < num_replication_; i ++) {
-            // [mralloc support]
-
+            // safe
             uint32_t rkey = nm->get_server_rkey(i);
             // print_log(DEBUG, "[%s] write meta to server(%d) raddr(%lx) rkey(%x)", __FUNCTION__, i, client_meta_addr_, rkey);
             ret = nm->nm_rdma_write_inl_to_sid(&meta_info, sizeof(ClientMetaAddrInfo),
@@ -693,6 +696,7 @@ int ClientMM::dyn_reg_new_space(const struct MrInfo * mr_info_list, const uint8_
     // send meta info to remote
     // print_log(DEBUG, "[%s] send meta info to remote", __FUNCTION__);
     for (int i = 0; i < num_replication_; i ++) {
+        // safe
         uint32_t rkey = nm->get_server_rkey(i);
         // print_log(DEBUG, "[%s] writing to server(%d) addr(%lx) rkey(%x)", __FUNCTION__, i, client_meta_addr_, rkey);
         ret = nm->nm_rdma_write_inl_to_sid_sync(&meta_info, sizeof(ClientMetaAddrInfo), client_meta_addr_, rkey, i);
@@ -735,6 +739,7 @@ int ClientMM::mm_traverse_log(UDPNetworkManager * nm) {
     uint64_t ptr_sid  = log_meta_info->pr_server_id;
     int cnt = 0;
     while (ptr_addr != 0) {
+        // safe
         uint32_t rkey = nm->get_server_rkey(ptr_sid);
         ret = nm->nm_rdma_read_from_sid(tmp_buf_, recover_mr_->lkey, subblock_sz_, 
             ptr_addr, rkey, ptr_sid);
@@ -776,6 +781,7 @@ int ClientMM::mm_get_addr_meta(UDPNetworkManager * nm) {
     // print_log(DEBUG, "  [%s] 2. read meta addr info", __FUNCTION__);
     int ret = 0;
     uint64_t r_meta_addr = client_meta_addr_ - sizeof(ClientLogMetaInfo);
+    // safe
     uint32_t rkey = nm->get_server_rkey(0);
     ret = nm->nm_rdma_read_from_sid(recover_buf_, recover_mr_->lkey, 
         CLIENT_META_LEN, r_meta_addr, rkey, 0);
@@ -812,6 +818,7 @@ int ClientMM::mm_recover_mm_blocks(UDPNetworkManager * nm) {
         ClientMMBlock * new_mmblock = get_new_mmblock();
         for (int i = 0; i < num_replication_; i ++) {
             new_mmblock->mr_info_list[i].addr = meta_addr_info_list->addr_list[i];
+            // safe
             new_mmblock->mr_info_list[i].rkey = nm->get_server_rkey(meta_addr_info_list->server_id_list[i]);
             new_mmblock->server_id_list[i] = meta_addr_info_list->server_id_list[i];
         }
