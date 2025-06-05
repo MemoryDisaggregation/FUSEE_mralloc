@@ -17,7 +17,7 @@
 #define SUBBLOCK_NUM_BMASK  0xF
 #define MAX_REP_NUM         10
 
-enum alloc_method { cxl_shm_alloc, fusee_alloc, share_alloc, pool_alloc};
+enum alloc_method { cxl_shm_alloc, fusee_alloc, share_alloc, pool_alloc, rpc_alloc};
 
 // #define YCSB_10M
 // #define SERVER_MM

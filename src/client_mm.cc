@@ -497,8 +497,8 @@ int ClientMM::alloc_from_sid(uint32_t server_id, UDPNetworkManager * nm, int all
         gettimeofday(&start, NULL);
         if(alloc_method_ == fusee_alloc)
             nm->get_alloc_connection()->remote_fetch_block(addr, rkey, int(log2(mm_block_sz_/4096)));
-        // else if (use_reg)
-        //     nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
+        else if (alloc_method_ == rpc_alloc)
+            nm->get_alloc_connection()->register_remote_memory(addr, rkey, mm_block_sz_);
         else if (alloc_method_ == share_alloc){
             one_sided_alloc(nm->get_alloc_connection(),addr, rkey);
         }

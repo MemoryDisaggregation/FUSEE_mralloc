@@ -27,6 +27,8 @@ int main(int argc, char ** argv) {
         alloc_method_  = share_alloc;
     else if (allocator_type == "pool")
         alloc_method_  = pool_alloc;
+    else if (allocator_type == "rpc")
+        alloc_method_  = rpc_alloc;
    
     GlobalConfig config;
     int ret = load_config(argv[1], &config);

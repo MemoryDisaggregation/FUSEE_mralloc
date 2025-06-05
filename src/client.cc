@@ -5168,8 +5168,8 @@ uint64_t Client::reclaim(double &ratio) {
             free_sum_block += temple_free;
             if(alloc_method_ == fusee_alloc)
                 nm_->get_alloc_connection()->remote_free_block(addr_);
-            // else if (use_reg)
-            //     printf("dereg unfinished\n");
+            else if (alloc_method_ == rpc_alloc)
+                printf("dereg unfinished\n");
             else if (alloc_method_ == share_alloc){
                 // printf("free addr: %lx\n", addr_);
                 nm_->get_alloc_connection()->full_free(addr_, 0);
